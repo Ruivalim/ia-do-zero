@@ -73,6 +73,39 @@ export default function Home() {
         </dl>
       </section>
 
+      {/* ── ressalva ────────────────────────────────────────────────────── */}
+      <section className="mb-14 rounded-2xl border border-amber/35 bg-amber/[0.06] p-5">
+        <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold tracking-wide text-amber uppercase">
+          <span aria-hidden="true">⚠️</span>
+          Antes de começar
+        </div>
+        <div className="flex flex-col gap-3 text-sm leading-relaxed text-muted">
+          <p>
+            O conteúdo deste site foi escrito com auxílio de inteligência artificial e{' '}
+            <strong className="text-ink">ainda não passou por revisão completa</strong>. Pode conter
+            erro técnico, número impreciso, simplificação que distorce o conceito ou explicação
+            desatualizada — a área muda rápido.
+          </p>
+          <p>
+            Trate como ponto de partida para entender a ideia, não como fonte para citar. Antes de
+            usar qualquer número, fórmula ou afirmação em prova, artigo ou produção, confira no
+            material original. As páginas de papers linkam a fonte justamente para isso.
+          </p>
+          <p>
+            Achou um erro?{' '}
+            <a
+              href="https://github.com/Ruivalim/ia-do-zero/issues/new"
+              target="_blank"
+              rel="noreferrer"
+              className="text-amber underline underline-offset-3 hover:text-ink"
+            >
+              Abra uma issue
+            </a>{' '}
+            — correção vale mais que elogio.
+          </p>
+        </div>
+      </section>
+
       {/* ── tracks ──────────────────────────────────────────────────────── */}
       <section>
         <h2 className="mb-6 text-xl font-semibold tracking-tight text-ink">
