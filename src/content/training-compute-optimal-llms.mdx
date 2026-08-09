@@ -1,0 +1,159 @@
+<TLDR>
+  Com um orçamento fixo de compute, **tamanho do modelo e quantidade de tokens de treino devem
+  crescer na mesma proporção** — e os LLMs grandes de 2022 estavam todos subtreinados, grandes
+  demais para a quantidade de dados que viram.
+</TLDR>
+
+<Analogy>
+  Duas padarias com o mesmo dinheiro. Uma compra um forno industrial gigante e farinha para uma
+  semana; a outra compra um forno médio e farinha para o ano. A segunda vende mais pão. Os LLMs da
+  época eram a primeira padaria: forno enorme, pouca farinha. O paper mede a receita que equilibra
+  os dois.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2020, Kaplan et al. mostraram que o loss de um modelo de linguagem segue uma
+<Ref to="leis-de-escala">lei de escala</Ref> previsível com o número de parâmetros. A conclusão
+prática que a indústria tirou foi: aumente o modelo. Para um orçamento de compute 10 vezes maior,
+a receita de Kaplan pedia um modelo 5,5 vezes maior e só 1,8 vez mais tokens de treino.
+
+Resultado: GPT-3 (175B), Jurassic-1 (178B), Gopher (280B) e MT-NLG (530B) foram todos treinados
+com cerca de 300 bilhões de tokens — quase a mesma quantidade de dados para modelos cada vez
+maiores. Como ninguém treina um modelo desses duas vezes, errar a divisão do orçamento é um erro
+permanente.
+
+## A ideia
+
+A pergunta do paper é direta: com $C$ FLOPs fixos, qual o par $(N, D)$ — parâmetros e tokens — que
+minimiza o loss? Em vez de chutar, os autores treinaram mais de 400 modelos, de 70 milhões a mais
+de 16 bilhões de parâmetros, em 5 a 500 bilhões de tokens, e mediram a resposta de três jeitos
+independentes.
+
+<Steps
+  items={[
+    [
+      'Variar a duração do treino',
+      'Para cada tamanho de modelo, treinam 4 versões com horizontes diferentes e extraem a curva de menor loss por FLOP.',
+    ],
+    [
+      'Perfis IsoFLOP',
+      'Fixam 9 orçamentos de compute e, em cada um, variam o tamanho do modelo. O loss forma um vale — o fundo do vale é o tamanho ótimo.',
+    ],
+    [
+      'Ajuste paramétrico',
+      'Ajustam uma fórmula fechada para o loss em função de N e D, com um termo para o texto, um para o modelo e um para o treino incompleto.',
+    ],
+    [
+      'Testar a previsão',
+      'As três abordagens apontam o mesmo: escalar N e D igual. Para conferir, treinam o Chinchilla — 70B de parâmetros, 1,4 trilhão de tokens.',
+    ],
+  ]}
+/>
+
+Os expoentes medidos foram 0,50 e 0,50 na primeira abordagem, 0,49 e 0,51 na segunda, 0,46 e 0,54
+na terceira — sempre perto de meio a meio, longe do 0,73 e 0,27 de Kaplan. A frase do resumo é
+seca: os modelos grandes atuais estão, nas palavras do paper, "significantly undertrained".
+
+Por que Kaplan errou? Ele fixou o número de tokens e o schedule de learning rate para todos os
+modelos. O paper mostra que o ciclo de cosseno do <Ref to="gradiente-descendente">learning
+rate</Ref> precisa casar com a duração do treino; sem isso, o loss de um treino curto parece pior
+do que é, e a conta empurra o modelo para cima e os dados para baixo.
+
+## O que mudou depois
+
+Para o orçamento de compute do Gopher — $5{,}76 \times 10^{23}$ FLOPs — a análise previa um modelo
+ótimo entre 40B e 70B de parâmetros, não 280B. O Chinchilla foi treinado na ponta maior dessa
+faixa: 70B de parâmetros, 1,4 trilhão de tokens, mesmo compute do Gopher. Venceu o Gopher em
+quase tudo, e também GPT-3, Jurassic-1 e MT-NLG 530B.
+
+Os números: 67,5% de acurácia média no MMLU, mais de 7 pontos acima do Gopher e o melhor resultado
+publicado até então — acima inclusive da previsão que 73 previsores humanos fizeram para junho de
+2023. No BIG-bench, 65,1% contra 54,4% do Gopher. Em LAMBADA, 77,4% contra 74,5%. No TruthfulQA
+zero-shot, 43,6% contra 29,5%. Em todos os subconjuntos do The Pile, o loss caiu.
+
+E tem o bônus que não aparece no benchmark: um modelo 4 vezes menor custa 4 vezes menos em
+inferência e em <Ref to="fine-tuning-e-lora">fine-tuning</Ref>. Ganhar performance gastando menos
+para servir é o tipo de troca que não tem lado ruim.
+
+Num teste direto a $10^{21}$ FLOPs, o modelo de 2,8B que a análise do paper indicava venceu o de
+4,7B que a receita de Kaplan indicava. A lição deslocou o gargalo do campo: parâmetro deixou de
+ser a moeda escassa; dado de qualidade virou.
+
+<Deep>
+  A modelagem assume que o loss final se decompõe em três termos:
+
+  $$
+  \hat{L}(N, D) = E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}}
+  $$
+
+  $E$ é a entropia do texto natural — o chão que nenhum modelo cruza. O termo em $N$ cobra o que um
+  transformer de $N$ parâmetros perde por não ser o processo gerador ideal. O termo em $D$ cobra o
+  treino incompleto: passos finitos de otimização, uma época só sobre os dados. O ajuste usa loss
+  Huber sobre o log do loss, via L-BFGS com grade de inicializações, e chega a $E = 1{,}69$,
+  $A = 406{,}4$, $B = 410{,}7$, $\alpha = 0{,}34$, $\beta = 0{,}28$.
+
+  O compute aproxima por $C \approx 6ND$ (o paper confere que a conta detalhada muda pouco).
+  Minimizar $\hat{L}$ sob essa restrição dá $N_{opt} \propto C^{a}$ e $D_{opt} \propto C^{b}$ com
+  $a = \beta/(\alpha+\beta)$ e $b = \alpha/(\alpha+\beta)$ — como $\alpha \approx \beta$, sai o
+  meio a meio. Na prática, o ponto ótimo fica na casa de 20 tokens por parâmetro: 70B de parâmetros
+  pedem 1,4 trilhão de tokens.
+
+  Detalhe de engenharia que sustenta a conclusão: o ciclo de cosseno do learning rate deve durar o
+  treino inteiro, com decaimento de 10×. Esticar o ciclo mais de 25% além do número de passos
+  degrada o loss de forma clara. E o Chinchilla ainda trocou Adam por AdamW e guardou os pesos em
+  float32 no estado do otimizador distribuído, treinando em bfloat16 — duas mudanças pequenas que o
+  apêndice mostra que importam.
+</Deep>
+
+<Callout type="trap">
+  A leitura errada é "modelo grande não vale a pena" ou "dado importa mais que parâmetro". O paper
+  não diz nada disso: diz que, **com compute fixo**, a divisão ótima é meio a meio. Dobrou o
+  orçamento? Dobre os dois. Um modelo de 1 trilhão de parâmetros continua sendo a escolha certa —
+  quando você tiver os mais de $10^{26}$ FLOPs e os trilhões de tokens para sustentá-lo.
+</Callout>
+
+<Callout type="warn">
+  Os próprios autores listam as ressalvas. Só há duas corridas comparáveis em escala grande
+  (Chinchilla e Gopher); a fronteira ótima mostra uma curvatura que sugere que o tamanho ótimo em
+  orçamentos altos pode ser ainda menor que o previsto; e todos os treinos usaram menos de uma
+  época de dados — o regime de repetir dado ficou fora do escopo.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a pergunta central que o paper responde?',
+      options: [
+        'Qual arquitetura de transformer escala melhor',
+        'Como dividir um orçamento fixo de compute entre tamanho do modelo e tokens de treino',
+        'Quantas GPUs são necessárias para treinar um modelo de 70B',
+        'Se modelos de linguagem entendem o que geram',
+      ],
+      answer: 1,
+      why: 'O paper modela o loss como função de parâmetros e tokens sob a restrição de FLOPs fixos, e conclui que os dois devem crescer na mesma proporção.',
+    },
+    {
+      q: 'Por que Kaplan et al. chegaram a uma receita diferente, favorecendo modelo maior?',
+      options: [
+        'Usaram modelos pequenos demais e GPUs antigas',
+        'Mediram acurácia em vez de loss',
+        'Fixaram o número de tokens e o schedule de learning rate, o que superestima o loss de treinos mais curtos',
+        'Não contaram os FLOPs das camadas de embedding',
+      ],
+      answer: 2,
+      why: 'Com schedule fixo de 130B tokens, os losses intermediários de treinos curtos ficam inflados, o que faz treinar com menos dados parecer pior do que é.',
+    },
+    {
+      q: 'O que a comparação Chinchilla versus Gopher demonstra?',
+      options: [
+        'Que modelos de 70B são sempre melhores que os de 280B',
+        'Que com o mesmo compute, um modelo 4 vezes menor treinado com 4 vezes mais dados vence em quase todas as tarefas',
+        'Que o MMLU é um benchmark fácil',
+        'Que 300 bilhões de tokens são suficientes para qualquer modelo',
+      ],
+      answer: 1,
+      why: 'Chinchilla e Gopher consumiram os mesmos FLOPs; o Chinchilla trocou parâmetros por tokens e ganhou em quase toda a avaliação, validando a previsão.',
+    },
+  ]}
+/>

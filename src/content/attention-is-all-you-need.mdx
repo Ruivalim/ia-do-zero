@@ -1,0 +1,159 @@
+<TLDR>
+  O paper mostra que dá para jogar fora a recorrência inteira e **modelar sequência só com
+  atenção** — o que deixa o treino paralelo e encurta o caminho entre duas palavras distantes
+  para um único passo.
+</TLDR>
+
+<Analogy>
+  Ler um livro com uma RNN é ler palavra por palavra, na ordem, carregando na cabeça um resumo do
+  que já passou. Ler com atenção é abrir o livro numa mesa grande, com todas as páginas à vista, e
+  para cada palavra olhar direto para as outras que importam. A segunda forma exige mais mesa, mas
+  não exige fila.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2017 o estado da arte em tradução era encoder-decoder recorrente: LSTM ou GRU, quase sempre
+com um mecanismo de atenção pendurado entre o encoder e o decoder. A atenção já existia e já
+funcionava — o que travava era a recorrência embaixo dela.
+
+Uma <Ref to="rnn-e-sequencias">rede recorrente</Ref> calcula o estado $h_t$ a partir de $h_{t-1}$.
+Isso amarra o cálculo à ordem: a posição 500 só existe depois que as 499 anteriores existirem.
+Dentro de um exemplo não há paralelismo nenhum, e é exatamente em sequência longa que isso dói,
+porque a memória da GPU limita quanto dá para compensar juntando exemplos no mesmo batch.
+
+Tem um segundo problema, mais sutil: distância. Para a informação da palavra 1 chegar na palavra
+100, ela atravessa 100 passos recorrentes. Cada passo é uma chance de o sinal do gradiente se
+diluir. O paper chama isso de comprimento do caminho, e trata como métrica de projeto.
+
+## A ideia
+
+O Transformer tira a recorrência e a convolução do caminho e deixa só atenção, feed-forward,
+conexão residual e normalização. Seis camadas no encoder, seis no decoder.
+
+<Steps
+  items={[
+    [
+      'Todo mundo entra de uma vez',
+      'A sequência inteira vira uma matriz de embeddings. Não existe passo temporal: as posições são processadas juntas.',
+    ],
+    [
+      'Cada posição pergunta às outras',
+      'Cada token gera uma query e compara com as keys de todos os tokens; o resultado pondera os values. É a self-attention.',
+    ],
+    [
+      'Várias cabeças em paralelo',
+      'Oito projeções diferentes rodam ao mesmo tempo, cada uma olhando um tipo de relação, e os resultados são concatenados.',
+    ],
+    [
+      'A posição volta pela porta dos fundos',
+      'Sem recorrência, a ordem sumiu. O paper soma ao embedding um positional encoding de senos e cossenos em frequências diferentes.',
+    ],
+    [
+      'O decoder não pode espiar',
+      'A self-attention do decoder é mascarada: a posição i só enxerga até i, o que preserva a geração um token por vez.',
+    ],
+  ]}
+/>
+
+O que mudou de verdade está na tabela de complexidade do paper. Uma camada recorrente precisa de
+$O(n)$ operações sequenciais e tem caminho máximo $O(n)$ entre duas posições. Uma camada de
+self-attention precisa de $O(1)$ operações sequenciais e tem caminho máximo $O(1)$ — qualquer
+palavra alcança qualquer outra em um salto. O preço é a conta por camada, que sai de
+$O(n \cdot d^2)$ para $O(n^2 \cdot d)$.
+
+Esse $n^2$ é a origem direta do custo de <Ref to="janela-de-contexto">janela de contexto</Ref> que
+incomoda até hoje. Enquanto a frase é mais curta que a dimensão do modelo — o caso normal em
+tradução — a troca compensa. Quando o contexto cresce, o quadrado cobra.
+
+## O que mudou depois
+
+Os números do paper são de tradução, não de chatbot. Em WMT 2014 inglês-alemão o modelo grande
+marcou 28,4 BLEU, mais de 2 pontos acima do melhor resultado publicado até então, incluindo
+ensembles. Em inglês-francês, 41,8 BLEU, treinando por 3,5 dias em oito GPUs P100 — uma fração do
+custo dos concorrentes. O modelo base treinou em 12 horas e já passava tudo que existia.
+
+Para mostrar que a arquitetura não era só um truque de tradução, os autores aplicaram em análise
+sintática de constituintes do inglês, tarefa com pouco dado e saída muito estruturada: 91,3 de F1
+treinando só no WSJ, melhor que quase todo modelo específico da época.
+
+O legado é o que veio depois. Tirar o encoder e ficar só com o decoder mascarado dá a família GPT;
+ficar só com o encoder dá a família BERT. As <Ref to="leis-de-escala">leis de escala</Ref> só
+puderam ser estudadas porque a arquitetura aceitava ser treinada em paralelo em milhares de chips.
+
+<Deep>
+  A atenção do paper é a escalada por produto escalar:
+
+  $$
+  \mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+  $$
+
+  A divisão por $\sqrt{d_k}$ não é enfeite. Se as componentes de $q$ e $k$ forem independentes com
+  média 0 e variância 1, o produto escalar tem variância $d_k$; sem normalizar, o softmax satura e
+  o gradiente some. É o mesmo motivo de sempre — escala errada mata o
+  <Ref to="gradiente-descendente">gradiente</Ref>.
+
+  Configuração do modelo base: $N = 6$ camadas, $d_{model} = 512$, $h = 8$ cabeças com
+  $d_k = d_v = d_{model}/h = 64$, feed-forward interno $d_{ff} = 2048$, dropout 0,1, label
+  smoothing 0,1. Como cada cabeça trabalha em dimensão reduzida, o custo total de oito cabeças
+  fica parecido com o de uma cabeça em dimensão cheia.
+
+  O treino usa Adam com $\beta_1 = 0{,}9$, $\beta_2 = 0{,}98$ e um learning rate que sobe linear
+  por 4000 passos e depois cai com o inverso da raiz do passo. Transformer sem warmup diverge nas
+  primeiras iterações — é a armadilha de implementação mais comum ao reproduzir o paper.
+
+  Na ablação, cortar para uma cabeça só custa 0,9 BLEU, e encoding posicional aprendido empata com
+  o senoidal. A escolha do senoidal foi por hipótese de extrapolar para sequências mais longas que
+  as vistas no treino, não por resultado medido.
+</Deep>
+
+<Callout type="trap">
+  O paper não inventou atenção. Atenção entre encoder e decoder já era padrão desde 2014, e é isso
+  que o título brinca: a novidade é que atenção **basta** — dá para remover a recorrência em vez de
+  decorar ela. Quem lê o título como "descobrimos a atenção" inverte a contribuição.
+</Callout>
+
+<Callout type="warn">
+  Cuidado com a extrapolação para LLM. O Transformer original é encoder-decoder treinado em pares
+  de tradução com no máximo algumas centenas de tokens. Nada aqui fala de pré-treino em texto da
+  internet, de instrução ou de <Ref to="rlhf-e-dpo">alinhamento</Ref> — isso veio nos anos
+  seguintes, em cima da arquitetura.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Criar o mecanismo de atenção',
+        'Mostrar que dá para modelar sequência sem recorrência nem convolução, só com atenção',
+        'Provar que RNN não aprende dependência longa',
+        'Inventar o embedding de palavras',
+      ],
+      answer: 1,
+      why: 'Atenção e embedding já existiam. O que o paper mostra é que a recorrência era removível — e que remover deixa o treino paralelo.',
+    },
+    {
+      q: 'Por que os autores dividem o produto escalar por raiz de d_k?',
+      options: [
+        'Para economizar memória',
+        'Para o resultado caber em float16',
+        'Porque a variância do produto escalar cresce com d_k e satura o softmax',
+        'Para normalizar o comprimento da sequência',
+      ],
+      answer: 2,
+      why: 'Com d_k grande, os produtos escalares ficam grandes, o softmax entra na região saturada e o gradiente vira quase zero.',
+    },
+    {
+      q: 'Qual é o custo da troca proposta pelo paper?',
+      options: [
+        'A conta por camada vira quadrática no comprimento da sequência',
+        'O modelo perde a capacidade de tradução',
+        'O treino deixa de aceitar GPU',
+        'A rede fica limitada a seis camadas',
+      ],
+      answer: 0,
+      why: 'Self-attention custa O(n²·d) por camada contra O(n·d²) da recorrência. Compensa enquanto n é menor que d — e é a raiz do custo de contexto longo.',
+    },
+  ]}
+/>
