@@ -1,0 +1,113 @@
+<TLDR>
+  Uma rede multicamada alterna transformações lineares e ativações não lineares. Cada camada
+  recombina a anterior, permitindo **construir features e fronteiras que um perceptron não
+  alcança**.
+
+</TLDR>
+
+<Analogy>
+Uma cozinha não transforma ingredientes em prato com uma única mistura. Primeiro corta e aquece; depois combina texturas; por fim ajusta sabor e monta. Cada etapa recebe uma representação já transformada pela anterior.
+
+Camadas ocultas fazem algo parecido. Nenhuma precisa reconhecer o resultado completo. Elas produzem peças intermediárias que as próximas conseguem recombinar.
+
+</Analogy>
+
+## Do corte reto à fronteira curva
+
+Um <Ref to="perceptron">perceptron</Ref> faz uma soma ponderada e separa o espaço com uma reta. Uma MLP adiciona camadas ocultas e funções de ativação. Cada unidade cria um recorte simples; a camada seguinte combina vários recortes. O conjunto aproxima regiões curvas, ilhas e interações.
+
+<Demo id="mlp-playground" />
+
+No playground, uma camada estreita pode não ter peças suficientes para separar os pontos. Aumentar largura oferece mais recortes. Aumentar profundidade permite compor recortes já construídos. O efeito depende da não linearidade: sem ela, todas as camadas voltam a ser uma única reta.
+
+## Features aprendidas
+
+Em modelos clássicos, alguém costuma desenhar features antes do treino. Uma MLP aprende representações internas junto com a tarefa. A primeira camada combina entradas brutas; camadas seguintes detectam combinações dessas combinações.
+
+Isso não garante que cada neurônio corresponda a um conceito nomeável. A representação costuma ser distribuída: uma ideia aparece como padrão entre várias unidades, e cada unidade participa de várias ideias. “Camada oculta constrói features” descreve função, não uma legenda pronta.
+
+## Largura, profundidade e capacidade
+
+O teorema da aproximação universal diz que uma rede com uma camada oculta suficientemente larga pode aproximar qualquer função contínua em um domínio compacto, sob condições adequadas. Ele não diz qual largura basta na prática, se o gradiente encontra os pesos ou se a rede usa dados com eficiência.
+
+Profundidade oferece composicionalidade. Uma função feita de partes reutilizáveis pode ser expressa em camadas, enquanto uma camada única talvez precise enumerar muitas combinações separadamente. Isso explica por que “uma camada basta em teoria” não é receita de arquitetura.
+
+Uma camada densa liga toda entrada a toda saída. Portanto, dobrar as duas larguras quadruplica aproximadamente seus pesos. Capacidade cresce rápido, junto com memória, custo de multiplicação e risco de ajustar ruído.
+
+<Callout type="trap">
+  Adicionar camadas não conserta automaticamente um problema. Sem dados suficientes, regularização e
+  otimização estável, mais capacidade só chega mais rápido ao{' '}
+  <Ref to="overfitting">overfitting</Ref>. Se treino e validação pioram, investigue escala,
+  gradiente e arquitetura; se apenas validação piora, capacidade extra pode ser a causa.
+
+</Callout>
+
+## Onde uma MLP faz sentido
+
+MLPs são naturais para vetores de tamanho fixo e como cabeças de classificação sobre features já preparadas. Também aparecem dentro de quase toda arquitetura profunda como blocos que misturam canais ou dimensões.
+
+Para imagem, uma MLP pura ignora que pixels vizinhos têm relação espacial e repete conexões em todas as posições. CNNs embutem localidade e compartilhamento de pesos. Para sequências, uma MLP comum não representa ordem nem compartilha processamento ao longo do comprimento. RNNs e Transformers trazem essas estruturas.
+
+Arquitetura especializada é uma hipótese útil sobre os dados. Ela reduz o que o modelo precisa reaprender. Quando a entrada já é um embedding compacto ou uma tabela bem preparada, a simplicidade da MLP pode ser exatamente a escolha certa.
+
+<Deep>
+Para uma camada com $d_{in}$ entradas e $d_{out}$ saídas, a matriz de pesos tem formato $d_{in}\times d_{out}$ e o viés tem $d_{out}$ valores. A contagem é
+
+$$
+d_{in}d_{out}+d_{out}
+$$
+
+O forward de um lote com $B$ exemplos produz um tensor $B\times d_{out}$ e custa, em ordem dominante, proporcionalmente a $B d_{in}d_{out}$. Ativações intermediárias precisam ser guardadas para o backward.
+
+Inicializar todos os pesos com zero preserva simetria: unidades da mesma camada recebem o mesmo gradiente, continuam idênticas e nunca aprendem features diferentes. Inicialização aleatória quebra essa simetria, mas sua escala precisa preservar sinais ao longo da profundidade.
+
+Batch normalization normaliza ativações usando estatísticas do lote e mantém médias para inferência; funciona bem em vários cenários, mas depende do tamanho e da composição do batch. Layer normalization normaliza dimensões dentro de cada exemplo e não mistura exemplos, por isso se encaixa em sequências e Transformers.
+
+O bloco feed-forward de um Transformer é uma MLP aplicada independentemente a cada posição. Ela projeta a dimensão do modelo para uma dimensão intermediária maior, aplica ativação ou gate e projeta de volta. Attention mistura informações entre tokens; a MLP transforma as features de cada token. O objeto básico é o mesmo, inserido em uma arquitetura com estrutura adicional.
+
+</Deep>
+
+<Callout type="ok">
+  Comece por uma baseline pequena que consiga overfitting em um lote reduzido. Isso confirma que
+  dados, perda e gradiente estão conectados. Depois aumente capacidade e regularização olhando
+  validação.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que permite a uma MLP criar fronteiras curvas?',
+      options: [
+        'Apenas aumentar a learning rate',
+        'Compor camadas com ativações não lineares',
+        'Inicializar todos os pesos com zero',
+        'Remover as camadas ocultas',
+      ],
+      answer: 1,
+      why: 'Cada ativação introduz uma dobra não linear. Camadas posteriores combinam essas dobras em regiões que uma reta não representa.',
+    },
+    {
+      q: 'O que o teorema da aproximação universal não garante?',
+      options: [
+        'Que certas redes podem aproximar funções contínuas',
+        'Que a arquitetura será treinável e eficiente com dados finitos',
+        'Que uma camada oculta pode ter grande capacidade',
+        'Que ativações não lineares importam',
+      ],
+      answer: 1,
+      why: 'Existência de pesos não fornece algoritmo para encontrá-los, largura prática, eficiência estatística nem boa generalização.',
+    },
+    {
+      q: 'Por que inicializar todos os pesos de uma camada com zero falha?',
+      options: [
+        'Porque a perda não aceita zero',
+        'Porque unidades simétricas recebem o mesmo gradiente e permanecem iguais',
+        'Porque o batch fica grande demais',
+        'Porque zera apenas os vieses',
+      ],
+      answer: 1,
+      why: 'Sem diferenças iniciais, todas as unidades fazem o mesmo cálculo e recebem a mesma atualização. A camada desperdiça sua largura.',
+    },
+  ]}
+/>

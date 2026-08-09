@@ -1,0 +1,127 @@
+<TLDR>
+  Sem suíte de <Term id="eval">eval</Term>, "melhorei o prompt" é chute. Toda mudança de sistema de
+  IA precisa de um **número antes e depois** nos mesmos casos — senão você só tem impressão e
+  regressão silenciosa.
+
+</TLDR>
+
+<Analogy>
+  É o mesmo papel que testes automatizados têm em software. Você não faz merge porque "rodou na
+  minha máquina e a tela ficou bonita". Tem suite, tem caso que já quebrou uma vez, tem CI. Em LLM a
+  saída é estocástica e o espaço de inputs é linguagem natural — então a suite importa **mais**, não
+  menos.
+
+</Analogy>
+
+## Por que a média da demo mente
+
+Uma resposta boa no playground não generaliza. Você mudou o prompt, testou o exemplo favorito, aprovou. No dia seguinte um cliente manda o caso feio — o mesmo que já falhou mês passado — e quebra de novo. Sem registro permanente desse caso, o bug é um déjà vu eterno.
+
+Eval é o antídoto: conjunto versionado de entradas, critério de aprovação, e um score comparável entre versões do prompt, do modelo, do <Ref to="rag">RAG</Ref> ou do agente.
+
+<Demo id="eval-suite" />
+
+## Tipos de verificação
+
+Do mais barato e rígido ao mais flexível e caro:
+
+- **Exata** — string igual (após normalizar). Bom para classificação, IDs, respostas fechadas.
+- **Contém** — a saída precisa incluir um trecho ou todos de uma lista.
+- **Formato válido** — JSON parseia, schema valida, campos obrigatórios existem.
+- **Programática** — código verifica (número dentro de faixa, URL acessível, SQL só com SELECT).
+- **LLM como juiz** — outro modelo aplica uma rubrica.
+- **Humano** — amostra, calibração, casos ambíguos.
+
+Use o verificador mais simples que for fiel à tarefa. LLM-juiz para "o JSON tem o campo certo" é desperdício e ruído.
+
+## LLM como juiz: útil e enviesado
+
+Barato e escalável para critérios subjetivos (tom, utilidade, fidelidade a um texto). Vieses conhecidos:
+
+- **Posição** — prefere a resposta A ou B conforme a ordem no prompt.
+- **Tamanho** — premia resposta longa.
+- **Autopreferência** — modelos tendem a favorecer saídas do próprio estilo ou família.
+
+Mitigações: rubrica explícita, exemplos de calibração (âncoras), randomizar ordem em comparações pareadas, e **auditar com humano** numa amostra. Juiz sem âncora é opinião cara em loop.
+
+## Como construir o conjunto
+
+Comece pequeno e cruelmente realista:
+
+1. Umas dezenas de casos tirados de produção ou de tickets reais — não de exemplos inventados no vácuo.
+2. Inclua os que **já falharam**. Cada bug vira caso permanente.
+3. Cubra classes: feliz, borda, adversário leve, idioma, formato vazio, documento ausente no RAG.
+4. Cresça com disciplina: todo incidente de suporte que o modelo devia ter coberto entra na suite.
+
+Regressão é a regra, não a exceção. O prompt que conserta o caso A costuma quebrar o B. Por isso a suite inteira roda de novo — não só o caso que você estava debugando.
+
+<Callout type="warn" title="Média esconde carnificina">
+  Uma média que sobe de 0,80 para 0,82 pode esconder que uma fatia inteira (por exemplo, pedidos de
+  cancelamento ou perguntas em outro idioma) caiu de 0,9 para 0,4. Reporte por fatia, não só o
+  número global.
+
+</Callout>
+
+## Offline e online
+
+**Offline:** suite fixa, roda a cada mudança, compara versões. Controlável e barata de iterar.
+
+**Online:** A/B em produção, métricas de negócio e feedback humano real. Captura distribuição verdadeira — e exige volume, ética e instrumentação.
+
+Os dois se complementam. Offline evita regressão óbvia; online valida se a métrica da suite bate com valor real.
+
+<Deep>
+**Temperature e variância.** Em eval, fixe temperature baixa (ou zero quando o provedor permitir) e seeds se existirem — para reduzir ruído entre runs. Mesmo assim, não determinismo numérico e batching no servidor podem alterar tokens. Rode mais de uma vez quando o score oscilar perto do limiar e reporte intervalo, não um único float sagrado.
+
+**Contaminação.** Benchmarks públicos vazam para dados de treino. Um modelo "bom no leaderboard" pode ter memorizado o teste. Para produto, o que importa é **sua** suite, com dados seus, que não estavam no pré-treino de ninguém de forma útil.
+
+**Custo da suite.** Rodar mil casos com juiz LLM a cada commit dói. Mantenha um **smoke set** rápido na CI (dezenas de casos baratos, verificadores programáticos) e a suite completa em schedule ou pré-release.
+
+**Agentes e RAG.** Avalie recuperação e trajetória, não só a string final — ver <Ref to="rag">RAG</Ref> e <Ref to="agentes">agentes</Ref>. Um acerto com ferramenta proibida ou com trecho errado citado não é acerto de produto.
+
+</Deep>
+
+<Callout type="trap">
+  Medir só a média global. A versão nova "melhorou 2 pontos" e ao mesmo tempo quebrou uma classe
+  inteira de casos. Sem quebra por fatia e sem casos de regressão permanentes, a eval mente com
+  educação.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: "Por que 'melhorou no meu exemplo' não basta?",
+      options: [
+        'Porque exemplos únicos não detectam regressão nos outros casos',
+        'Porque a temperature precisa ser 2',
+        'Porque eval só serve para classificação clássica',
+        'Porque o modelo não aceita prompts longos',
+      ],
+      answer: 0,
+      why: 'Otimizar um caso a olho é o caminho clássico de quebrar outros. Suite fixa e comparável é o que transforma impressão em evidência.',
+    },
+    {
+      q: 'Quando preferir verificação programática a LLM-juiz?',
+      options: [
+        'Nunca; juiz é sempre melhor',
+        'Quando o critério for objetivo (schema, contém, faixa numérica, política codificável)',
+        'Só em produção',
+        'Só se não houver GPU',
+      ],
+      answer: 1,
+      why: 'Verificador determinístico é mais barato, estável e auditável. Juiz entra no subjetivo, com vieses e custo.',
+    },
+    {
+      q: 'O que fazer com cada bug de produção relacionado ao modelo?',
+      options: [
+        'Corrigir o prompt e esquecer',
+        'Transformar em caso permanente da suite de eval',
+        'Aumentar o número de parâmetros',
+        'Desligar o log',
+      ],
+      answer: 1,
+      why: 'Bug que não vira teste volta. A suite é a memória institucional do que já deu errado.',
+    },
+  ]}
+/>

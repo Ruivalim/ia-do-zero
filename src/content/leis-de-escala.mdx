@@ -1,0 +1,111 @@
+<TLDR>
+  Leis de escala dizem que a **perda cai como lei de potência** com dados, parâmetros e compute. Em
+  gráfico log-log vira quase reta — e essa previsibilidade, mais que qualquer truque, justificou o
+  investimento em escala.
+
+</TLDR>
+
+<Analogy>
+Você está calibrando um motor e descobre que, em certa faixa de rotação, o consumo cai de forma tão regular que dá para plotar em papel log e obter uma reta. Não é metafísica do universo: é um padrão empírico estável o bastante para planejar o tanque da próxima viagem.
+
+As leis de escala de LLMs são isso. Meça perda em modelos de tamanhos diferentes, com volumes de dados diferentes, e a nuvem de pontos se organiza. Quem financia data center não compra milagre; compra extrapolação com histórico.
+
+</Analogy>
+
+## Três eixos, uma regularidade
+
+Para modelos na mesma família arquitetural, a perda de treino (ou de validação em distribuição parecida) tende a melhorar de forma previsível quando se aumenta:
+
+- **N** — número de parâmetros
+- **D** — quantidade de tokens de treino
+- **C** — compute (ligada a N e D; grosso modo proporcional ao produto)
+
+Uma lei de potência em escala linear vira reta em log-log. Por isso os plots famosos parecem "tão limpos": o eixo certo revela a regularidade. Fora da faixa medida — arquitetura nova, dados muito piores, saturação — a reta mente.
+
+A utilidade prática foi política e econômica: antes de gastar o orçamento do próximo modelo, estima-se onde a curva deve cair. Erros de extrapolação existem; o caos total deixou de ser o padrão.
+
+<Demo id="scaling-laws" />
+
+No demo, a fronteira ótima e as configurações fora da proporção mostram o mesmo compute mal ou bem alocado. Modelo gigante com poucos tokens fica acima da curva; modelo menor com dados na razão certa aproveita melhor o orçamento.
+
+## Chinchilla e o que a prática fez depois
+
+A formulação mais citada (a família _Chinchilla_) aponta uma proporção aproximada da ordem de **vinte tokens de treino por parâmetro** para um orçamento fixo de compute. Abaixo disso, o modelo é grande demais e subtreinado: capacidade ociosa. Acima, empurra-se mais dados num modelo menor.
+
+Na prática se treina **além** do ótimo de treino. Motivo simples: o custo de **servir** o modelo dura para sempre. Um modelo menor, treinado por mais tokens, custa menos por requisição em memória e em banda — ver <Ref to="quantizacao">quantização</Ref> e o gargalo de inferência. O ótimo de "melhor perda por FLOP de treino" não é o ótimo de "melhor produto no ar por dólar de inferência".
+
+## O chão e o abismo entre perda e utilidade
+
+Existe **erro irredutível**: ruído do próximo token, ambiguidade da linguagem, teto do que a distribuição de dados permite prever. A curva não vai a zero; se aproxima de um assoalho.
+
+Mais importante para o usuário: **perda caindo não é o mesmo que capacidade útil aparecendo.** A entropia cruzada no pré-treino pode melhorar de forma suave enquanto benchmarks de raciocínio, código ou ferramenta dão saltos, platôs ou nada. Métricas descontínuas (passou/falhou) transformam melhora contínua de probabilidade em "emergência" visual no gráfico.
+
+Escalar **compute de inferência** virou eixo novo: mesmo modelo, mais tempo pensando — cadeias longas, busca, amostragens, ferramentas. Não é só "modelo maior no treino"; é gastar FLOPs na hora de responder. As leis clássicas cobrem pré-treino; o regime "pensar mais" tem suas próprias curvas e custos.
+
+<Callout type="trap" title="Não é lei da natureza">
+Tratar scaling laws como gravidade é o erro comum. São **ajustes empíricos** em famílias de modelos, dados e faixas de escala. Mudou a arquitetura, a qualidade do corpus, o objetivo de pós-treino — a reta pode inclinar, quebrar ou só valer no intervalo onde foi medida.
+
+Elas não prometem que a capacidade X aparece no tamanho Y. Prometem, com ressalvas, que a perda de modelagem de linguagem deve cair de forma aproximadamente poderosa se você escalar dentro do regime estudado. Utilidade de produto, segurança e custo de servir são capítulos à parte.
+
+</Callout>
+
+## O que limita o próximo degrau
+
+Mesmo com a reta bonita, o mundo real aperta:
+
+- **Dados de qualidade.** Texto público de alto sinal não é infinito. Repetir lixo ou sintético barato devolve menos por token.
+- **Energia e chips.** Compute não é abstrato; é megawatt e fila de GPU.
+- **Memória e servir.** Modelo que só existe no treino não paga a conta — ver também <Ref to="mixture-of-experts">MoE</Ref> e o gap entre parâmetros totais e ativos.
+
+Previsibilidade de perda continua útil. Não substitui eval de tarefa, medição de custo por resposta e ceticismo com gráfico log que começa depois do eixo que você se importa.
+
+<Deep>
+**A forma $L = E + A/N^{\alpha} + B/D^{\beta}$.** Em palavras: a perda $L$ é um chão $E$ (erro irredutível) mais um termo que cai quando o modelo cresce ($N$ parâmetros) e outro que cai quando os dados crescem ($D$ tokens). Expoentes $\alpha, \beta$ e coeficientes $A, B$ se ajustam aos pontos experimentais. Em log-log, cada termo de potência vira reta; o chão $E$ vira a assíntota horizontal. Há variantes em função do compute $C$ quando se impõe a relação entre $N$, $D$ e FLOPs (constantes de contagem de operações por parâmetro e token).
+
+**Fronteira ótima.** Fixado o orçamento $C$, minimiza-se $L$ sujeito a $C \propto N \cdot D$. Isso devolve a alocação "quantos parâmetros vs quantos tokens" — a razão tipo Chinchilla. Fora dela, o mesmo $C$ compra perda pior: ou modelo inchado com dados insuficientes, ou modelo pequeno que já esgotou o retorno de mais dados relativos ao tamanho.
+
+**Emergência e métrica descontínua.** Se a habilidade real sobe de forma suave na probabilidade de acerto, mas o gráfico reporta "exatidão exata" ou "passou no teste", a curva parece um degrau. A crítica metodológica: muitas "capacidades emergentes" são artefato do limiar da métrica, não de uma fase mágica nos pesos. Isso não nega saltos qualitativos de produto; pede cuidado ao narrar o gráfico.
+
+**Contaminação de benchmark.** Se recortes do teste vazaram no pré-treino, a perda e o score sobem juntos sem generalização. Scaling "bonito" em benchmark contaminado é miragem. Por isso evals novos, canários e checagem de overlap importam mais à medida que o corpus engole a internet.
+
+**Gargalos práticos.** Qualidade de dados (não só volume), energia, memória de inferência e complexidade de servir limitam o próximo ponto da reta tanto quanto a fórmula. A lei de potência descreve um regime; engenharia e economia decidem se o próximo ponto existe.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que plots de scaling costumam usar eixos log-log?',
+      options: [
+        'Porque a perda sobe com o tamanho do modelo',
+        'Porque uma lei de potência vira aproximadamente uma reta nessa escala, o que facilita ver e extrapolar o padrão',
+        'Porque log elimina o erro irredutível',
+        'Porque GPUs só treinam em log',
+      ],
+      answer: 1,
+      why: 'Lei de potência em linear vira reta em log-log. A reta é ferramenta de leitura e planejamento — com faixa de validade, não dogma.',
+    },
+    {
+      q: "Por que se treina além da razão 'ótima' de tokens por parâmetro do pré-treino?",
+      options: [
+        'Porque mais parâmetros sempre pioram a perda',
+        'Porque o custo de servir o modelo persiste para sempre: um modelo menor treinado por mais tempo costuma ser mais barato de operar',
+        'Porque Chinchilla proíbe modelos grandes',
+        'Porque a loss irredutível some com mais tokens',
+      ],
+      answer: 1,
+      why: 'O ótimo de treino (melhor perda por FLOP de pré-treino) não coincide com o ótimo de produto (custo de inferência ao longo da vida útil do modelo).',
+    },
+    {
+      q: 'O que as leis de escala NÃO garantem?',
+      options: [
+        'Que, na faixa medida, a perda de linguagem tende a cair de forma regular ao escalar N, D ou C',
+        'Que a capacidade útil X aparece automaticamente no tamanho Y de modelo',
+        'Que existe um assoalho de erro irredutível',
+        'Que alocar mal parâmetros vs tokens desperdica compute',
+      ],
+      answer: 1,
+      why: 'São ajustes empíricos sobre perda de modelagem, não profecias de produto. Emergência em benchmark, contaminação e métrica descontínua atrapalham a leitura ingênua da reta.',
+    },
+  ]}
+/>

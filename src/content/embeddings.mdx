@@ -1,0 +1,140 @@
+<TLDR>
+  Um embedding é uma lista de números que representa significado. Coisas parecidas ganham números
+  parecidos, e aí **distância vira semelhança** — algo que um computador consegue calcular.
+
+</TLDR>
+
+<Analogy>
+Pense num mapa de cidades. Cada cidade vira um par de números: latitude e longitude. Com isso você responde "qual a cidade mais próxima daqui?" sem saber nada sobre as cidades — só fazendo conta.
+
+Um embedding faz o mesmo com significado, só que em vez de 2 números usa centenas ou milhares. As direções não têm nome, ninguém as escolheu, mas o efeito é o mesmo: "gato" cai perto de "cachorro", longe de "hipoteca". E aí buscar por sentido vira buscar por proximidade.
+
+</Analogy>
+
+<Demo id="embeddings" />
+
+## De onde vêm os números
+
+Ninguém escreve os embeddings à mão. Eles caem de um princípio de linguística dos anos 50: _uma palavra é definida pelas companhias que mantém_. Palavras que aparecem em contextos parecidos devem ter representação parecida.
+
+Um modelo treinado para <Ref to="proximo-token">prever a próxima palavra</Ref> é obrigado a descobrir isso. Se "gato" e "cachorro" aparecem nas mesmas posições ("o \_\_\_ dormiu no sofá"), a rede economiza parâmetros colocando os dois perto. A geometria não foi projetada: ela é subproduto da compressão.
+
+O resultado tem propriedades que surpreenderam todo mundo em 2013. Direções no espaço acabam correspondendo a relações:
+
+```
+vetor("rei") − vetor("homem") + vetor("mulher") ≈ vetor("rainha")
+vetor("Paris") − vetor("França") + vetor("Japão") ≈ vetor("Tóquio")
+```
+
+Existe uma direção que significa aproximadamente "gênero" e outra que significa "capital de". Ninguém as programou.
+
+<Callout type="warn" title="Sem romantizar">
+  Essas analogias funcionam bem nos exemplos famosos e mal em muitos outros. O truque frequentemente
+  exige excluir as palavras de entrada do resultado, senão a resposta mais próxima é a própria
+  "rei". A geometria carrega estrutura real, mas bem menos limpa do que a demonstração sugere.
+
+</Callout>
+
+## Por que cosseno e não distância
+
+A medida padrão é a **similaridade de cosseno**: o cosseno do ângulo entre dois vetores. Vai de 1 (mesma direção) a −1 (opostos), passando por 0 (perpendiculares, sem relação).
+
+Ela ignora o tamanho do vetor, e isso é intencional. O tamanho tende a carregar frequência da palavra e comprimento do texto, não conteúdo. Um documento de 3 páginas e um resumo de 3 linhas sobre a mesma coisa apontam para a mesma direção com tamanhos diferentes. Cosseno diz "iguais"; distância euclidiana diria "distantes".
+
+## Estático × contextual
+
+Aqui mora a diferença entre 2013 e agora.
+
+<Versus
+  left="Embedding estático (word2vec, GloVe)"
+  right="Embedding contextual (BERT, LLM)"
+  rows={[
+    ['Uma palavra tem', 'Um vetor, sempre o mesmo', 'Um vetor diferente por contexto'],
+    [
+      '"banco" em frases diferentes',
+      'Mesmo vetor no banco de praça e no banco de investimento',
+      'Vetores distintos, o contexto desambigua',
+    ],
+    [
+      'Como se obtém',
+      'Tabela pré-calculada, consulta instantânea',
+      'Passa o texto pelo modelo, custa uma inferência',
+    ],
+    [
+      'Onde ainda serve',
+      'Baseline barato, tarefas simples de similaridade',
+      'Praticamente tudo hoje: busca, RAG, classificação',
+    ],
+  ]}
+/>
+
+Dentro de um LLM, a camada de embedding fornece o vetor inicial de cada token — ainda estático. As camadas de <Ref to="self-attention">attention</Ref> é que misturam contexto e transformam esse vetor em algo específico daquela frase.
+
+## Onde isso é usado de verdade
+
+- **Busca semântica**: achar documentos por sentido, não por palavra exata. "Como cancelo minha conta?" encontra um artigo intitulado "Encerramento de cadastro".
+- **<Ref to="rag">RAG</Ref>**: o passo de recuperação é, no fundo, uma busca por cosseno num banco de vetores.
+- **Deduplicação e agrupamento**: achar tickets de suporte que dizem a mesma coisa com palavras diferentes.
+- **Recomendação**: itens próximos no espaço são substitutos ou complementos.
+- **Classificação barata**: em vez de fine-tuning, embede tudo e treine um classificador simples por cima. Costuma ser bom o suficiente e custa quase nada.
+
+<Callout type="trap">
+  Embeddings de modelos diferentes **não são comparáveis**. Um vetor do modelo A e um do modelo B
+  vivem em espaços sem relação nenhuma; o cosseno entre eles é ruído. Se você trocar o modelo de
+  embedding, precisa reindexar tudo — é a migração que mais pega gente de surpresa em produção de
+  RAG.
+
+</Callout>
+
+<Deep>
+Pontos práticos:
+
+**Dimensionalidade.** Modelos de embedding atuais produzem tipicamente entre 384 e 3072 dimensões. Mais dimensões capturam mais nuance e custam mais memória e tempo de busca. Alguns modelos suportam _Matryoshka_: o vetor é treinado de forma que truncar as primeiras $k$ dimensões ainda dê um embedding utilizável, permitindo trocar precisão por custo sem reindexar do zero.
+
+**Normalização.** Se você normaliza todos os vetores para norma 1, o cosseno vira o produto interno, e a distância euclidiana vira uma função monotônica dele. Isso permite usar índices de produto interno, que são mais rápidos. Faça isso uma vez, na indexação.
+
+**Busca aproximada.** Comparar a consulta com 50 milhões de vetores um a um é inviável. Bancos vetoriais usam ANN — HNSW (grafo navegável em camadas) é o mais comum, IVF-PQ quando memória é o gargalo. Você troca uma fração de recall por duas ordens de grandeza de velocidade. O parâmetro `ef_search` do HNSW é a alavanca desse trade-off.
+
+**Assimetria consulta/documento.** Uma pergunta curta e um parágrafo de resposta não são o mesmo tipo de texto. Modelos treinados para recuperação usam prefixos distintos (`query:` e `passage:`) justamente para lidar com isso. Ignorar essa instrução do model card degrada o recall de forma silenciosa.
+
+**Viés herdado.** O espaço reproduz as associações do corpus, incluindo as indesejadas. A literatura documenta analogias com estereótipos ocupacionais de gênero em word2vec e sucessores. Técnicas de "debiasing" por projeção removem a manifestação superficial e deixam a estrutura intacta, o que é um resultado incômodo e importante. Veja <Ref to="vies-e-dados">viés e dados</Ref>.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que a similaridade de cosseno é preferida à distância euclidiana em embeddings de texto?',
+      options: [
+        'Porque é mais rápida de calcular',
+        'Porque ignora o tamanho do vetor, que carrega frequência e comprimento em vez de conteúdo',
+        'Porque sempre dá valores entre 0 e 1',
+        'Porque funciona em qualquer número de dimensões',
+      ],
+      answer: 1,
+      why: 'Um resumo curto e um texto longo sobre o mesmo assunto apontam na mesma direção com magnitudes diferentes. Cosseno mede a direção e ignora a magnitude — que é justamente a parte que não interessa.',
+    },
+    {
+      q: 'Qual a diferença central entre embedding estático e contextual?',
+      options: [
+        'O contextual tem mais dimensões',
+        'O contextual gera um vetor diferente para a mesma palavra em frases diferentes',
+        'O estático é mais preciso',
+        'O contextual não precisa de treino',
+      ],
+      answer: 1,
+      why: '"Banco" tem um vetor só no word2vec, e um vetor por contexto num modelo com attention. É a desambiguação que o embedding estático não conseguia fazer.',
+    },
+    {
+      q: 'Você troca o modelo de embedding do seu sistema de busca. O que precisa acontecer?',
+      options: [
+        'Nada, os vetores são compatíveis',
+        'Reindexar toda a base: vetores de modelos diferentes vivem em espaços sem relação',
+        'Só ajustar o threshold de similaridade',
+        'Converter os vetores com uma matriz de rotação',
+      ],
+      answer: 1,
+      why: 'Não existe correspondência entre os espaços de dois modelos. Comparar um vetor novo com índices antigos produz resultado sem sentido. Reindexação completa é obrigatória.',
+    },
+  ]}
+/>

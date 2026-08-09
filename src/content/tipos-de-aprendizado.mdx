@@ -1,0 +1,143 @@
+<TLDR>
+  A diferença entre os três tipos de aprendizado é uma só: **quem dá a resposta certa, e quando**.
+  No supervisionado, alguém dá para cada exemplo. No não supervisionado, ninguém dá. No reforço, o
+  mundo dá — atrasado e incompleto.
+
+</TLDR>
+
+<Analogy>
+Três formas de aprender a cozinhar.
+
+**Supervisionado**: um chef ao seu lado prova cada prato e diz "sal a mais", "está bom", "queimou". Feedback imediato e específico, para cada tentativa.
+
+**Não supervisionado**: você recebe uma caixa com trezentos ingredientes e ninguém fala nada. Você começa a perceber sozinho que uns são doces, outros ácidos, uns combinam com massa. Ninguém confirmou nada — você achou estrutura.
+
+**Por reforço**: você abre um restaurante. Ninguém diz o que está errado em cada prato. No fim do mês você vê o faturamento. Foi o risoto ou o atendimento? Descobrir é parte do problema.
+
+</Analogy>
+
+<Demo id="learning-types" />
+
+## Supervisionado
+
+O mais comum em produção, de longe. Você tem pares: entrada e a resposta certa. Foto → "gato". Email → "spam". Histórico do cliente → "cancelou". O modelo aprende a função que liga um ao outro.
+
+Divide-se em dois casos pela natureza da resposta:
+
+- **Classificação**: a resposta é uma categoria. Spam ou não. Qual das 10 doenças. Qual dos 3 planos.
+- **Regressão**: a resposta é um número contínuo. Preço do imóvel, temperatura amanhã, tempo até a falha.
+
+O gargalo do supervisionado nunca é o algoritmo. É conseguir os rótulos. Rotular 100 mil imagens médicas exige radiologistas, tempo e dinheiro — e dois radiologistas discordam com mais frequência do que você imagina.
+
+## Não supervisionado
+
+Sem rótulo nenhum. O objetivo é achar estrutura que já estava lá:
+
+- **Agrupamento** (<Ref to="kmeans">k-means</Ref>): quais exemplos se parecem entre si.
+- **Redução de dimensionalidade**: comprimir 500 colunas em 2 sem perder o essencial, geralmente para visualizar.
+- **Detecção de anomalia**: o que foge do padrão. Fraude, falha de máquina, tráfego estranho.
+
+Aqui não existe "acurácia". Não há gabarito para comparar. A avaliação é sempre indireta: os grupos fazem sentido para quem conhece o negócio? A compressão preservou o que importa?
+
+<Callout type="info" title="O caso que virou o mundo de cabeça para baixo">
+  O pré-treino de um LLM é tecnicamente **auto-supervisionado**: ninguém rotulou nada, mas o rótulo
+  está escondido no próprio dado — a próxima palavra do texto é a resposta certa. Isso permitiu
+  treinar em trilhões de tokens sem um único anotador humano. É provavelmente a ideia mais
+  consequente da década.
+
+</Callout>
+
+## Por reforço
+
+Um agente age num ambiente, recebe recompensa, e aprende a política que maximiza recompensa acumulada. Sem gabarito por passo: você só descobre que a jogada 12 foi ruim quando perde a partida na jogada 40.
+
+Dois problemas nascem daí:
+
+- **Atribuição de crédito**: qual das 40 ações causou a derrota?
+- **Exploração × aproveitamento**: repetir o que já funciona ou testar algo novo que pode ser melhor?
+
+RL domina jogos e controle (robótica, refrigeração de data center). Em negócio comum é raro, porque exige um simulador barato ou tolerância a errar muito no mundo real. Mas ele aparece num lugar central: <Ref to="rlhf-e-dpo">RLHF</Ref>, a fase que transforma um LLM cru em assistente.
+
+<Versus
+  left="Supervisionado"
+  right="Por reforço"
+  rows={[
+    ['Feedback', 'Resposta certa para cada exemplo', 'Recompensa numérica, atrasada'],
+    [
+      'Custo do dado',
+      'Alto: precisa de anotador humano',
+      'Baixo se houver simulador, proibitivo se não',
+    ],
+    [
+      'Falha típica',
+      'Rótulo ruim ou enviesado',
+      'Recompensa mal especificada: o agente burla a métrica',
+    ],
+    [
+      'Onde brilha',
+      'Previsão, classificação, extração',
+      'Controle, jogos, ajuste de comportamento',
+    ],
+  ]}
+/>
+
+<Callout type="trap">
+  A pergunta "qual algoritmo devo usar?" quase sempre vem antes da hora. A pergunta anterior é:
+  **que tipo de feedback eu consigo obter, e a que custo?** Se você não consegue rótulo,
+  supervisionado está fora, por melhor que fosse. Se você não tem simulador nem tolerância a erro
+  caro, RL está fora. O tipo de aprendizado é decidido pelos seus dados, não pela sua preferência.
+
+</Callout>
+
+<Deep>
+A taxonomia dos três é útil para ensinar e vaza em produção. Os casos intermediários são a maioria:
+
+**Semi-supervisionado.** Poucos rótulos, muitos dados crus. Técnicas como pseudo-rotulagem (o modelo rotula os não rotulados com alta confiança e retreina) ou consistência sob perturbação. Frequente em visão médica.
+
+**Auto-supervisionado.** Rótulo derivado automaticamente do dado: prever o próximo token, prever um trecho mascarado (BERT), prever se dois recortes vieram da mesma imagem (SimCLR). Formalmente é supervisionado; a diferença prática é que o rótulo é grátis e infinito. É o motor de todo modelo de fundação.
+
+**Aprendizado ativo.** O modelo escolhe quais exemplos quer que você rotule — tipicamente aqueles onde ele está mais incerto. Reduz muito o custo de anotação quando o orçamento de rotulagem é o gargalo.
+
+**Contrastivo.** Aprender aproximando pares positivos e afastando negativos no espaço de <Ref to="embeddings">embeddings</Ref>. É o que faz o <Ref to="multimodal">CLIP</Ref> colocar imagem e texto no mesmo espaço, sem nenhum rótulo de classe.
+
+Sobre RL, uma armadilha que vale conhecer pelo nome: _reward hacking_. Se a recompensa é "tempo de tela", o agente aprende a viciar; se é "nota do avaliador humano", ele aprende a bajular. O agente otimiza exatamente o que você mediu, incluindo os atalhos que você não previu. É o mesmo fenômeno que aparece em <Ref to="alinhamento">alinhamento</Ref>, em escala maior.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Você tem 2 milhões de artigos sem nenhuma anotação e quer descobrir sobre quais assuntos eles falam. Que tipo de aprendizado?',
+      options: [
+        'Supervisionado, com classificação',
+        'Não supervisionado, com agrupamento',
+        'Por reforço',
+        'Nenhum: sem rótulo não dá para fazer nada',
+      ],
+      answer: 1,
+      why: 'Não há rótulo e o objetivo é achar estrutura — é agrupamento. Depois alguém olha os grupos e dá nome a eles, mas o algoritmo chegou nos grupos sozinho.',
+    },
+    {
+      q: 'Por que o pré-treino de um LLM é chamado de auto-supervisionado e não de não supervisionado?',
+      options: [
+        'Porque usa GPUs',
+        'Porque existe uma resposta certa em cada passo — a próxima palavra — extraída do próprio texto',
+        'Porque humanos revisam a saída',
+        'Porque o modelo é muito grande',
+      ],
+      answer: 1,
+      why: 'Há gabarito: o token seguinte. Ele só não foi escrito por um anotador, foi tirado do próprio dado. Isso é o que torna possível treinar em trilhões de tokens sem custo de rotulagem.',
+    },
+    {
+      q: 'Qual é a falha característica do aprendizado por reforço?',
+      options: [
+        'Overfitting no conjunto de teste',
+        'O agente otimizar a métrica de recompensa de um jeito que você não pretendia',
+        'Falta de memória GPU',
+        'Rótulos ruidosos',
+      ],
+      answer: 1,
+      why: 'Reward hacking. O agente faz exatamente o que a recompensa pede, incluindo atalhos que ninguém previu. Escrever a recompensa certa é a parte difícil do RL, não o algoritmo.',
+    },
+  ]}
+/>

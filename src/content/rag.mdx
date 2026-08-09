@@ -1,0 +1,141 @@
+<TLDR>
+  RAG é **busca + colar trechos no prompt**. O modelo não "lê a empresa inteira": ele responde com o
+  que a recuperação trouxe. Se o trecho certo não entrou no contexto, nenhum LLM salva.
+
+</TLDR>
+
+<Analogy>
+  É a diferença entre decorar a biblioteca e ir buscar o livro certo na hora da pergunta. O
+  bibliotecário (recuperação) acha as páginas relevantes; o leitor talentoso (o LLM) resume e
+  responde. Se o bibliotecário trouxer o volume errado com cara de certeza, o leitor escreve uma
+  resposta linda — e errada.
+
+</Analogy>
+
+## O pipeline, ponta a ponta
+
+<Steps
+  items={[
+    [
+      'Ingestão',
+      'Documentos entram: PDF, wiki, tickets, código. Limpeza e metadados (fonte, data, produto) nascem aqui.',
+    ],
+    [
+      'Chunking',
+      'O texto vira pedaços indexáveis. Tamanho e sobreposição decidem se a resposta completa cabe num pedaço só.',
+    ],
+    ['Embedding', 'Cada chunk vira um vetor. A consulta do usuário também.'],
+    [
+      'Índice',
+      'Um banco vetorial (e muitas vezes um índice lexical) guarda os pedaços para busca rápida.',
+    ],
+    [
+      'Recuperação',
+      'A pergunta puxa os k trechos mais próximos — e, se houver, os melhores do BM25.',
+    ],
+    [
+      'Montagem + geração',
+      'Os trechos entram no prompt com a pergunta. O modelo gera a resposta, de preferência citando a fonte.',
+    ],
+  ]}
+/>
+
+Isso é <Term id="rag">RAG</Term>: _retrieval-augmented generation_. Não é fine-tuning. Os pesos do modelo não mudam; muda o **contexto** daquela chamada.
+
+<Demo id="rag-pipeline" />
+
+## Chunking é onde o RAG ruim quebra
+
+<Term id="chunk">Chunk</Term> pequeno demais corta a resposta no meio: a política de reembolso fica
+pela metade, o modelo completa com palpite. Chunk grande demais dilui o sinal: o
+<Term id="embedding">embedding</Term> vira uma média confusa e a busca devolve "quase isso".
+Sobreposição entre pedaços vizinhos ajuda a não perder a frase que caía na fronteira.
+
+Não existe tamanho universal. Documento legal, FAQ e código pedem estratégias diferentes. O teste certo é: para as perguntas reais do seu produto, o trecho necessário aparece entre os recuperados?
+
+## Recuperação: não confie só no vetor
+
+Busca vetorial pega paráfrase e sinônimo. Busca lexical (BM25 e afins) pega código de produto, nomes próprios e termos raros que o embedding suaviza. **Híbrido** (os dois, depois fusão) quase sempre bate vetorial pura.
+
+Depois dos k candidatos, um **reranker** (em geral um cross-encoder que lê pergunta e trecho juntos) reordena o topo. É o ganho barato mais comum: você gasta um pouco mais de compute só nos finalistas, não em todo o corpus.
+
+## O que RAG não resolve
+
+RAG **reduz** <Term id="alucinacao">alucinação</Term> quando o trecho certo está no contexto e o prompt pede fidelidade à fonte. Não elimina. E cria um modo de falha novo: recuperar o trecho **errado** com confiança. A resposta fica bem escrita, com citação, e o erro parece documentado.
+
+Por isso citações e rastreabilidade não são enfeite. Em ambiente corporativo, metade do valor do RAG é poder apontar **de qual parágrafo** veio a afirmação — e auditar quando a busca falhou.
+
+<Callout type="warn" title="Contexto longo não mata RAG">
+  Janelas grandes ajudam, mas não substituem recuperação boa. Colar o manual inteiro custa latência,
+  dinheiro e ainda sofre o efeito de informação "perdida no meio" da sequência. Busca seleciona;
+  contexto longo só acomoda.
+
+</Callout>
+
+## Montagem do prompt importa
+
+Não basta despejar trechos. Ordem, delimitadores e instrução de fidelidade mudam o comportamento: diga que a resposta deve se basear nos trechos, citar a fonte, e admitir quando o material não cobre a pergunta. Trechos contraditórios (política antiga vs nova) precisam de regra — por data no metadado, por exemplo — senão o modelo escolhe o que soar melhor.
+
+Permissões também entram na recuperação: filtrar documentos que o usuário não pode ver **antes** de embeddar a resposta. Recuperar e depois "pedir sigilo" no prompt é teatro.
+
+## Busca primeiro, LLM depois
+
+Trate o sistema como duas peças com métricas próprias. Se o trecho certo não está entre os k recuperados, a geração só maquia o fracasso. Melhore chunking, híbrido e rerank **antes** de trocar o modelo de chat. Uma <Ref to="avaliacao">eval</Ref> separada de recall@k evita celebrar prompt novo quando a busca continua cega.
+
+<Deep>
+**Métricas separadas.** Recuperação: recall@k (o trecho certo entrou nos k?), MRR (em que posição?). Geração: fidelidade à fonte, relevância à pergunta, e — quando existir — acerto factual. Otimizar só a resposta final esconde se o problema é busca ou modelo.
+
+**Chunking semântico vs fixo.** Fixo (N tokens com overlap) é simples e previsível. Semântico (cortar em títulos, seções, sentenças) preserva unidades de sentido e costuma recuperar melhor — com mais engenharia e bordas estranhas em texto mal formatado.
+
+**Metadados e filtros.** Data, produto, idioma, permissão de acesso: filtre **antes** ou **na** busca. Embedding sozinho não sabe que o usuário não pode ver o documento do outro time.
+
+**Trocar o modelo de embedding.** Vetores de um modelo não são compatíveis com outro. Trocar implica reindexar o corpus inteiro — custo e janela de inconsistência. Trate a escolha do embedder como decisão de plataforma, não como detalhe.
+
+**Custo e latência.** Cada consulta: embed da pergunta + busca + (opcional) rerank + geração com contexto maior. O trecho recuperado ocupa a <Term id="contexto">janela de contexto</Term> e compete com o histórico da conversa.
+
+</Deep>
+
+<Callout type="trap">
+  Tratar RAG como problema de LLM quando é problema de **busca**. Se o trecho certo não está entre
+  os recuperados, trocar o chat model, o prompt ou a temperature não resolve. Meça recall@k
+  primeiro.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que o RAG muda no modelo?',
+      options: [
+        'Os pesos, via fine-tuning automático nos documentos',
+        'O contexto da chamada: trechos recuperados entram no prompt',
+        'A arquitetura, adicionando uma camada de memória',
+        'A temperature padrão',
+      ],
+      answer: 1,
+      why: 'RAG não treina. Ele busca e cola. O modelo base continua o mesmo; a informação nova chega como texto no prompt.',
+    },
+    {
+      q: 'Por que chunking ruim derruba o sistema inteiro?',
+      options: [
+        'Porque aumenta a temperature',
+        'Porque o pedaço errado de tamanho ou corte faz a busca devolver trecho incompleto ou diluído',
+        'Porque o tokenizador quebra',
+        'Porque o BM25 deixa de funcionar',
+      ],
+      answer: 1,
+      why: 'A unidade indexada é o chunk. Se ele corta a resposta ou mistura assuntos demais, a recuperação já nasce comprometida.',
+    },
+    {
+      q: 'Qual é a ordem correta de suspeita quando a resposta RAG erra?',
+      options: [
+        'Culpar o LLM primeiro e reescrever o prompt',
+        'Verificar se o trecho certo entrou na recuperação; só depois olhar geração',
+        'Aumentar k para o tamanho do corpus',
+        'Desligar as citações',
+      ],
+      answer: 1,
+      why: 'Sem o trecho certo no contexto, a geração não tem de onde tirar o fato. Diagnóstico começa na busca.',
+    },
+  ]}
+/>

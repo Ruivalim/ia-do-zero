@@ -1,0 +1,108 @@
+<TLDR>
+  Overfitting acontece quando o modelo aprende detalhes do treino que não se repetem fora dele. O
+  sinal não é acertar muito no treino; é **abrir uma distância entre treino e validação**.
+
+</TLDR>
+
+<Analogy>
+Uma pessoa decora as respostas de uma lista de exercícios, inclusive os erros de digitação. Na reaplicação da mesma lista, tira nota máxima. Quando as perguntas mudam de ordem e usam outros exemplos, tropeça.
+
+Outra pessoa entende só uma regra vaga e erra nas duas listas. A primeira sofreu overfitting. A segunda nem chegou lá: sofreu underfitting.
+
+</Analogy>
+
+## Dois jeitos de errar
+
+No **underfitting**, o modelo não tem capacidade, features ou treino suficiente para capturar o padrão. A perda fica alta no treino e na validação. Uma reta tentando separar uma fronteira curva é o exemplo geométrico mais simples.
+
+No **overfitting**, a perda de treino fica baixa, mas a de validação permanece alta ou volta a subir. O modelo tem capacidade para representar o padrão e também o ruído: exceções, erros de medição e coincidências que só existem naquela amostra.
+
+<Demo id="polyfit" />
+
+Ao aumentar a complexidade no demo, a curva de treino tende a melhorar continuamente. A validação costuma desenhar um U: primeiro melhora porque o modelo deixa de ser simples demais; depois piora porque a curva começa a perseguir cada ponto. O fundo do U é o alvo prático, não o menor erro de treino.
+
+## Bias e variância
+
+Bias é o erro sistemático de uma hipótese rígida. Um modelo com bias alto produz respostas parecidas mesmo quando o conjunto de treino muda, mas erra porque não consegue representar a forma verdadeira.
+
+Variância é sensibilidade à amostra. Um modelo com variância alta muda bastante quando alguns exemplos entram ou saem. Ele pode encaixar perfeitamente um treino e traçar outra regra sob uma nova amostra.
+
+Reduzir um costuma aumentar o outro. Dar mais capacidade reduz bias, mas abre espaço para variância. Restringir pesos e profundidade reduz variância, mas pode remover estrutura útil. A validação existe para encontrar o equilíbrio com dados, não por preferência estética.
+
+## Como conter
+
+Mais dados diversos são o remédio mais geral. Padrões reais reaparecem; coincidências não se sustentam. Mas volume sem cobertura não basta: repetir milhares de vezes o mesmo tipo de exemplo só reforça a mesma visão estreita.
+
+Regularização L1 ou L2 cobra por pesos grandes. Dropout remove unidades aleatoriamente durante o treino, impedindo dependências frágeis entre neurônios. Early stopping encerra o processo perto do melhor ponto de validação. Simplificar a arquitetura limita a capacidade diretamente. Data augmentation cria variações que deveriam preservar o rótulo, ensinando invariâncias úteis.
+
+Nenhum método corrige rótulo incoerente por completo. Se entradas equivalentes recebem respostas diferentes, existe erro irredutível. Um modelo que tenta zerar esse erro precisa memorizar qual ocorrência recebeu qual resposta. O ruído estabelece um piso para a perda fora do treino.
+
+<Callout type="trap">
+  Acurácia de treino alta, sozinha, não prova overfitting. Se a validação também está alta e
+  continua estável em um teste honesto, o modelo generaliza. Procure a distância entre treino e
+  validação e a evolução dessa distância, não um número isolado.
+
+</Callout>
+
+## Diagnóstico antes do remédio
+
+Curvas de aprendizado ajudam a separar causas. Se treino e validação estão ruins e próximos, aumentar regularização tende a piorar: o problema parece underfitting. Se treino está bom e validação ruim, mais dados ou mais restrição podem ajudar. Se ambos os resultados oscilam muito, talvez a validação seja pequena ou o pipeline tenha vazamento.
+
+Também confira se as distribuições combinam. Uma distância grande pode vir de mudança real entre treino e validação, não de capacidade excessiva. Chamar toda diferença de overfitting esconde problemas de coleta, tempo e população.
+
+<Deep>
+Na regularização L2, otimiza-se a perda junto de uma penalidade proporcional à norma quadrática dos pesos:
+
+$$
+\mathcal{L}_{\text{total}}(\theta)=\mathcal{L}_{\text{dados}}(\theta)+\lambda\lVert\theta\rVert_2^2
+$$
+
+O gradiente da penalidade puxa cada peso em direção a zero. Isso favorece funções menos sensíveis a pequenas variações da entrada. L1 usa a soma dos valores absolutos e pode zerar coeficientes, mas sua geometria e otimização são diferentes.
+
+Dropout amostra uma sub-rede a cada lote e reescala as ativações preservadas. A leitura como ensemble implícito é útil: muitas sub-redes compartilham parâmetros, e a inferência aproxima uma média delas sem executá-las separadamente. Não é idêntico a um ensemble convencional.
+
+Early stopping também regulariza. Os primeiros passos aprendem direções fortes e repetidas nos dados; continuar treinando permite ajustar direções menores, inclusive ruído. Parar cedo restringe implicitamente quão longe os parâmetros viajam, ainda que nenhuma penalidade apareça na função de perda.
+
+Há uma complicação moderna: em alguns regimes, o erro de validação cai, sobe perto do ponto em que o modelo passa a interpolar o treino e volta a cair quando a capacidade cresce muito. Esse comportamento é chamado **double descent**. É uma observação empírica importante, não uma teoria fechada que autorize ignorar validação. Modelos enormes ainda podem memorizar, vazar e falhar fora da distribuição.
+
+</Deep>
+
+<Callout type="ok">
+  Regularização boa não é a que produz o modelo menor. É a que melhora dados novos sem apagar o
+  sinal necessário. O valor da penalidade, a época de parada e a augmentation são hiperparâmetros
+  escolhidos na validação.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual padrão indica overfitting com mais clareza?',
+      options: [
+        'Erro alto e parecido em treino e validação',
+        'Erro baixo em treino e bem maior em validação',
+        'Acurácia alta nos dois conjuntos',
+        'Perda de treino diminuindo no começo',
+      ],
+      answer: 1,
+      why: 'Overfitting é a lacuna de generalização: o modelo se ajusta ao treino, mas o ganho não se transfere à validação.',
+    },
+    {
+      q: 'O que early stopping faz?',
+      options: [
+        'Aumenta a capacidade do modelo',
+        'Para perto do melhor resultado de validação antes de o ajuste ao ruído avançar',
+        'Remove exemplos com rótulos difíceis',
+        'Garante o mínimo global da perda',
+      ],
+      answer: 1,
+      why: 'Interromper o treino limita implicitamente o ajuste dos parâmetros e preserva o ponto que generalizou melhor na validação.',
+    },
+    {
+      q: 'Treino e validação estão ruins e muito próximos. Qual diagnóstico inicial faz mais sentido?',
+      options: ['Overfitting severo', 'Vazamento do teste', 'Underfitting', 'Acurácia boa demais'],
+      answer: 2,
+      why: 'Se nem o treino é bem explicado, o modelo provavelmente ainda não capturou o padrão. Falta capacidade, features ou otimização adequada.',
+    },
+  ]}
+/>

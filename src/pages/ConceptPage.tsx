@@ -73,15 +73,13 @@ export default function ConceptPage() {
       {/* ── body ────────────────────────────────────────────────────────── */}
       <div className="prose">
         <MDXProvider components={mdxComponents as unknown as MDXComponents}>
-          <Suspense
-            fallback={<div className="py-16 text-sm text-faint">carregando conteúdo…</div>}
-          >
+          <Suspense fallback={<div className="py-16 text-sm text-faint">carregando conteúdo…</div>}>
             {Body ? (
               <Body />
             ) : (
               <p className="text-muted">
-                Este capítulo ainda não foi escrito. Ele existe no índice porque faz parte da
-                trilha — volte depois.
+                Este capítulo ainda não foi escrito. Ele existe no índice porque faz parte da trilha
+                — volte depois.
               </p>
             )}
           </Suspense>
@@ -105,9 +103,7 @@ export default function ConceptPage() {
 
         {opens.length > 0 && (
           <div className="mt-6 text-sm">
-            <div className="mb-2 text-[11px] tracking-wide text-faint uppercase">
-              Isso destrava
-            </div>
+            <div className="mb-2 text-[11px] tracking-wide text-faint uppercase">Isso destrava</div>
             <div className="flex flex-wrap gap-2">
               {opens.map((c) => (
                 <Link

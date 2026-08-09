@@ -1,0 +1,153 @@
+<TLDR>
+  Alinhamento é fazer o sistema perseguir o **objetivo pretendido**, não o literal nem o proxy
+  fácil. É especificação, robustez e generalização — o problema de todo dia de quem coloca modelo em
+  produção, não só um debate abstrato.
+
+</TLDR>
+
+<Analogy>
+  É o gênio da lâmpada que realiza o pedido ao pé da letra. "Quero engajamento" rende clickbait e
+  raiva. "Maximize a métrica de recompensa" rende o agente de jogo que trava o placar em vez de
+  jogar. O desejo era outro; a especificação e o incentivo é que foram ingênuos.
+
+</Analogy>
+
+## Três camadas do problema
+
+Falar em <Term id="alinhamento">alinhamento</Term> sem separar ideias vira confusão. Um recorte útil:
+
+<Steps
+  items={[
+    [
+      'Especificação',
+      'O que você pediu (métrica, prompt, reward, política) captura o que você quis? Se não, o sistema otimiza o mapa errado.',
+    ],
+    [
+      'Robustez',
+      'Sob pressão — usuário adversário, input fora de distribuição, incentivo torto — o comportamento desejado se mantém?',
+    ],
+    [
+      'Generalização',
+      'O que valeu no treino e na eval ainda vale no mundo real, amanhã, com usuários novos?',
+    ],
+  ]}
+/>
+
+Nada disso é binário. Um assistente pode estar "mais alinhado" em tom de suporte e "menos" sob jailbreak criativo. Alinhado **não** é um selo permanente.
+
+## Desalinhamento externo vs interno
+
+**Externo:** a métrica ou a especificação está errada. Você treinou para cliques; queria bem-estar. O sistema está alinhado ao que você **escreveu**, desalinhado do que você **queria**.
+
+**Interno:** o modelo aprendeu um proxy que coincide com o objetivo no treino e diverge fora dele. No conjunto de treino, "fundo azul" previa a classe "lobo"; no mundo, o céu não é lobo. Atalho espúrio.
+
+Na prática os dois se misturam. Reward hacking em RL, otimização de engajamento em redes, classificadores de imagem que usam marca d'água em vez do objeto — são o mesmo espírito de "otimizou o sinal errado".
+
+<Versus
+  left="Desalinhamento externo"
+  right="Desalinhamento interno"
+  rows={[
+    [
+      'Onde está o erro',
+      'Na meta que você definiu',
+      'No que o modelo aprendeu para atingir a meta',
+    ],
+    [
+      'Exemplo',
+      'Maximizar tempo de tela como se fosse valor',
+      'Atalho no dado que some em produção',
+    ],
+    [
+      'Primeiro remédio',
+      'Reescrever objetivo, métricas, políticas',
+      'Melhor dado, eval OOD, robustez, interpretabilidade',
+    ],
+    [
+      'Sintoma típico',
+      'Sucesso na métrica, dano no mundo',
+      'Métrica de treino alta, falha fora da distribuição',
+    ],
+  ]}
+/>
+
+## Produção é alinhamento aplicado
+
+Quem serve LLM já negocia alinhamento sem o nome:
+
+- Prompt de sistema e políticas de recusa.
+- <Ref to="rlhf-e-dpo">Pós-treino</Ref> por preferência.
+- Filtros de entrada/saída, allowlists de ferramenta em <Ref to="agentes">agentes</Ref>.
+- <Ref to="avaliacao">Eval</Ref> de segurança e de regressão de produto.
+- Humano no loop para ações irreversíveis.
+
+Jailbreak e injeção de prompt são falhas de **robustez**: o modelo (ou a pilha) faz o que o atacante quer apesar da política. Não há solução completa só com mais texto de sistema. Defesa em profundidade: permissão no **sistema** (o que a ferramenta pode fazer, o que o backend aceita), não só no prompt.
+
+## Não é só risco existencial
+
+O debate público salta para cenários extremos. O engenheiro, na terça-feira, enfrenta: o bot prometeu reembolso que a política não cobre; o agente tentou chamar uma API destrutiva; o classificador reprova um subgrupo sem ninguém olhar a fatia. Isso **é** desalinhamento — especificação e robustez ruins — com custo real.
+
+O mesmo vale para <Ref to="vies-e-dados">viés</Ref>: otimizar uma métrica global que esconde dano em um grupo é desalinhamento de objetivo, não um "bug de fairness" separado da engenharia. E vale para produto generativo que premia engajamento sem medir veracidade — a especificação está fazendo o trabalho que o time não quis fazer à mão.
+
+Tratar alinhamento só como filosofia distante é o jeito mais rápido de não instrumentar o básico.
+
+## O que ainda é pesquisa (e o que já é ofício)
+
+Ofício: especificar melhor, medir por fatia, red team, menor privilégio, logs, eval adversária leve, não confiar no modelo como enforcement.
+
+Pesquisa: supervisionar modelos que superam o avaliador humano em domínios estreitos; interpretabilidade confiável o bastante para auditoria; garantias sob distribuição aberta. Não espere paper resolver o allowlist da sua ferramenta.
+
+<Deep>
+**Interpretabilidade.** Sondas, features, atribuição de influência: caminhos para *olhar dentro*. Úteis para hipótese e debug; ainda frágeis como prova de segurança. Mapa de <Term id="attention">attention</Term> não é explicação causal fiel — ver <Ref to="self-attention">self-attention</Ref>.
+
+**Red teaming e eval adversária.** Equipes tentam quebrar política de propósito. Os casos viram suite. Cobertura nunca é total; o valor é levantar o custo do ataque trivial e achar classes de falha cedo.
+
+**Escalabilidade da supervisão.** Quando o modelo é melhor que o revisor na tarefa, o humano vira gargalo e fonte de ruído. Decomposição de tarefas, debate, juízes assistidos — tentativas de escalar supervisão. Em produto, a saída prática é: não delegue o que você não consegue verificar de outro jeito (teste, ferramenta, segundo canal).
+
+**"Alinhado" não é permanente.** Novo fine-tuning, nova ferramenta, novo canal de input, nova distribuição de usuário — o equilíbrio muda. Alinhamento é processo e controle de mudança, não um checkbox de release.
+
+</Deep>
+
+<Callout type="trap">
+  Achar que instruir o modelo a ser seguro resolve. Instrução é **uma** camada. Controle de acesso,
+  escopo de ferramenta, validação de saída e auditoria são outras. Prompt não é permissão — o mesmo
+  erro de <Ref to="agentes">agentes</Ref> e de <Ref to="mcp">MCP</Ref> mal configurado.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que caracteriza desalinhamento externo?',
+      options: [
+        'O modelo quantizado em 4 bits',
+        'A métrica ou especificação otimizada não é o objetivo real que você queria',
+        'Falta de GPU',
+        'Tokenizer com vocabulário pequeno',
+      ],
+      answer: 1,
+      why: 'O sistema pode estar otimizando exatamente o que você pediu — e o pedido é que está errado.',
+    },
+    {
+      q: 'Por que jailbreak é problema de robustez?',
+      options: [
+        'Porque reduz o learning rate',
+        'Porque sob input adversário o comportamento foge da política pretendida',
+        'Porque aumenta o rank do LoRA',
+        'Porque o BM25 falha',
+      ],
+      answer: 1,
+      why: 'A política existe no papel (e no pós-treino); o atacante acha entradas que contornam. Defesa precisa ir além do texto de sistema.',
+    },
+    {
+      q: 'Qual atitude reflete alinhamento como ofício de produção?',
+      options: [
+        'Só discutir cenários de longo prazo e ignorar eval de produto',
+        'Especificar melhor, medir por fatia, limitar ferramentas e não usar o prompt como ACL',
+        'Desligar todos os logs por privacidade absoluta',
+        'Treinar sem preferências humanas sempre',
+      ],
+      answer: 1,
+      why: 'Alinhamento prático é especificação + medição + enforcement no sistema. Não é um parágrafo no system prompt.',
+    },
+  ]}
+/>

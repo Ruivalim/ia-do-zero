@@ -1,0 +1,124 @@
+<TLDR>
+  Um LLM não lê letras nem palavras. Ele lê **tokens**: pedaços de texto de tamanho variável,
+  tirados de um vocabulário fixo de algumas dezenas de milhares de peças. Muita coisa estranha que
+  os modelos fazem se explica aqui.
+
+</TLDR>
+
+<Analogy>
+Imagine um teclado com 100 mil teclas. Cada tecla é uma peça de texto: uma tem `casa`, outra tem `␣casa`, outra tem `ção`, outra tem só a letra `q`. Para escrever qualquer coisa, você precisa montar o texto apertando essas teclas na ordem.
+
+Palavras comuns têm tecla própria — uma apertada só. Palavras raras você monta em pedaços: `Ru` + `iva` + `lim`. E se aparecer um caractere que nenhuma tecla cobre, você desce ao nível dos bytes e monta byte por byte.
+
+O modelo vive nesse teclado. Ele nunca vê a letra individual dentro de uma tecla.
+
+</Analogy>
+
+<Demo id="tokenizer" />
+
+## Por que não usar palavras, ou letras
+
+Os dois extremos foram tentados e os dois falham:
+
+**Uma tecla por palavra.** Português tem centenas de milhares de formas flexionadas. O vocabulário fica gigante, e mesmo assim toda palavra nova — um nome próprio, um erro de digitação, uma gíria — cai fora dele e vira `<desconhecido>`, perdendo toda a informação.
+
+**Uma tecla por letra.** Vocabulário minúsculo e nada fica de fora, mas as sequências ficam longas demais. Como o custo de <Ref to="self-attention">attention</Ref> cresce com o quadrado do comprimento, uma frase de 200 caracteres custaria muito mais que uma de 40 tokens. E o modelo teria que gastar capacidade aprendendo a remontar palavras a partir de letras.
+
+Subpalavras ficam no meio: vocabulário na casa de 50 mil a 200 mil peças, nada fica de fora, e o texto comum comprime bem.
+
+## Como o vocabulário é construído
+
+O algoritmo mais usado é o **BPE** (Byte Pair Encoding), e ele é quase bobo de tão simples:
+
+<Steps
+  items={[
+    [
+      'Comece com bytes',
+      "O vocabulário inicial tem os 256 bytes possíveis. Assim, literalmente qualquer texto é representável — nunca existe 'palavra desconhecida'.",
+    ],
+    [
+      'Conte os pares',
+      'Percorra um corpus enorme e conte qual par de peças adjacentes aparece mais vezes.',
+    ],
+    [
+      'Funda o par mais frequente',
+      "Esse par vira uma peça nova do vocabulário. 'q' + 'u' vira 'qu'; depois 'qu' + 'e' vira 'que'.",
+    ],
+    [
+      'Repita',
+      'Até o vocabulário atingir o tamanho desejado. Palavras muito frequentes acabam virando uma peça só, naturalmente.',
+    ],
+  ]}
+/>
+
+Ninguém escreveu regras de morfologia. O que emerge — sufixos como `ção` e `mente` virando peças próprias — é só consequência de eles serem frequentes.
+
+<Callout type="trap" title="Por que o modelo erra ao contar letras">
+Pergunte a um LLM quantos "r" tem em "morrer" e ele pode errar. Não é falta de inteligência: `morrer` chega para o modelo como uma ou duas peças opacas, não como uma sequência de letras. É como pedir para alguém contar as ranhuras dentro de uma tecla que ele só aperta.
+
+O mesmo motivo explica dificuldade com rimas, anagramas, contagem de caracteres e aritmética dígito a dígito. Modelos recentes contornam isso decompondo números de forma consistente e usando <Ref to="agentes">ferramentas</Ref>, não por terem "aprendido a soletrar".
+
+</Callout>
+
+## Isso é dinheiro
+
+Você paga por token, e a taxa de compressão varia muito por idioma. O mesmo texto em inglês e em português não custa igual: o corpus de treino dos tokenizadores tem muito mais inglês, então palavras inglesas comuns viraram peças únicas com mais frequência.
+
+Na prática, para textos equivalentes, o português costuma gastar algo entre 15% e 40% mais tokens que o inglês. Idiomas com escrita não latina — tailandês, hindi — podem gastar várias vezes mais. Isso é um custo real e desigual, embutido na tecnologia.
+
+Emoji, JSON com muita pontuação, base64 e código minificado gastam desproporcionalmente. Teste no demo acima.
+
+<Deep>
+Detalhes que aparecem quando você implementa:
+
+**Byte-level BPE.** Os tokenizadores modernos (GPT-2 em diante) operam sobre bytes UTF-8, não sobre caracteres Unicode. Isso garante cobertura total sem token `<unk>`, ao custo de um caractere fora do ASCII ocupar 2 a 4 bytes e, se não estiver no vocabulário, virar 2 a 4 tokens.
+
+**A convenção do espaço à esquerda.** `␣casa` e `casa` são peças **diferentes**, com IDs diferentes e embeddings diferentes. Por isso um prompt terminado em espaço pode piorar a geração: você forçou o modelo a continuar com uma peça sem espaço inicial, que é rara nessa posição. A regra prática é não terminar o prompt com espaço.
+
+**Tokens especiais.** `<|im_start|>`, `<|endoftext|>` e afins são peças reservadas que delimitam papéis na conversa. Se texto do usuário puder conter essas sequências literais e o servidor não escapar, você tem uma superfície de injeção — o usuário consegue forjar uma marca de "fim do turno do sistema".
+
+**Glitch tokens.** Peças que existem no vocabulário mas quase não apareceram no treino ficam com embeddings praticamente não treinados. Consultá-las produz comportamento errático. O caso mais famoso é `SolidGoldMagikarp`, um nome de usuário de fórum que entrou no vocabulário do GPT-2 e depois foi filtrado do corpus de treino.
+
+**Custo assimétrico.** Tokens de saída costumam custar 3 a 5 vezes mais que os de entrada, porque a saída é gerada um token por vez (sequencial), enquanto a entrada é processada em paralelo numa passada só. Isso muda o cálculo de <Ref to="prompting">chain-of-thought</Ref>: raciocínio longo é caro no lado caro.
+
+**Contar tokens direito.** Estimar por `caracteres / 4` erra feio em português e em código. Se o custo importa, use a biblioteca do tokenizador do modelo específico — vocabulários diferentes dão contagens diferentes para o mesmo texto.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que os LLMs usam subpalavras em vez de palavras inteiras?',
+      options: [
+        'Porque é mais rápido de treinar',
+        'Porque assim nenhuma palavra fica de fora do vocabulário, incluindo nomes próprios e erros de digitação',
+        'Porque palavras inteiras ocupam mais memória na GPU',
+        'Porque subpalavras têm significado mais claro',
+      ],
+      answer: 1,
+      why: 'Com subpalavras (e, no limite, bytes), qualquer texto é representável. Vocabulário de palavras inteiras sempre deixa algo de fora, e o que fica de fora perde toda a informação.',
+    },
+    {
+      q: "Por que um modelo pode errar ao contar quantas letras 'r' existem em uma palavra?",
+      options: [
+        'Porque não sabe contar',
+        'Porque a palavra chega como um ou dois tokens opacos, e o modelo não enxerga as letras dentro deles',
+        'Porque a temperature está alta',
+        'Porque falta contexto',
+      ],
+      answer: 1,
+      why: 'É uma consequência direta da tokenização. O modelo opera sobre peças, não sobre caracteres. Ele pode ter memorizado a grafia de palavras comuns, mas não está lendo letra por letra.',
+    },
+    {
+      q: 'O mesmo texto traduzido para inglês e para português gera o mesmo número de tokens?',
+      options: [
+        'Sim, tokens são independentes de idioma',
+        'Não: o português costuma gastar mais, porque o vocabulário foi construído sobre um corpus dominado pelo inglês',
+        'Não: o inglês sempre gasta mais por ter mais palavras',
+        'Depende só do tamanho da fonte',
+      ],
+      answer: 1,
+      why: 'O BPE funde os pares mais frequentes do corpus de treino. Como esse corpus é majoritariamente inglês, palavras inglesas viraram peças únicas com mais frequência. Isso se traduz em custo maior por ideia em outros idiomas.',
+    },
+  ]}
+/>

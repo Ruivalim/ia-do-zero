@@ -1,0 +1,118 @@
+<TLDR>
+  "IA" é o nome do campo inteiro. Quase tudo que chamam de IA hoje é **machine learning**: programas
+  que não foram escritos com regras, e sim ajustados a partir de exemplos.
+
+</TLDR>
+
+<Analogy>
+Pense em ensinar alguém a reconhecer um cachorro.
+
+O jeito antigo era escrever a regra: "tem quatro patas, pelo, focinho alongado, rabo". Aí aparece um cachorro sem rabo, ou um gato, e a regra quebra. Você escreve mais regras. Aparece um cachorro de perfil. Mais regras. Nunca acaba.
+
+O jeito novo é mostrar cinquenta mil fotos rotuladas e deixar o sistema descobrir sozinho o que separa uma coisa da outra. Ninguém escreve "focinho". O programa sai dos dados.
+
+</Analogy>
+
+## As caixas dentro das caixas
+
+Os quatro termos que mais se confundem estão encaixados um dentro do outro:
+
+<Steps
+  items={[
+    [
+      'Inteligência artificial',
+      'O campo todo, desde 1956. Inclui coisas que não aprendem nada: o algoritmo de xadrez do Deep Blue, o roteador do seu GPS, um sistema de regras de aprovação de crédito.',
+    ],
+    [
+      'Machine learning',
+      'O pedaço da IA onde o comportamento é ajustado a partir de dados em vez de programado. Inclui regressão linear, árvores de decisão, KNN — coisas dos anos 60 que ainda funcionam muito bem.',
+    ],
+    [
+      'Deep learning',
+      'Machine learning feito com redes neurais de muitas camadas. Explodiu a partir de 2012, quando placas de vídeo ficaram baratas o bastante para treiná-las.',
+    ],
+    [
+      'IA generativa',
+      'O pedaço do deep learning que produz conteúdo novo em vez de só classificar. ChatGPT, Midjourney, os modelos de voz. É a fatia mais nova e a mais visível.',
+    ],
+  ]}
+/>
+
+Quando alguém diz "colocamos IA no produto", em 2026 isso quase sempre significa "chamamos a API de um LLM". É a fatia mais interna da cebola. Vale ter isso claro, porque muita coisa que resolve problema de negócio de verdade está nas camadas de fora — e é mil vezes mais barata.
+
+## O que mudou, de fato
+
+A ideia de rede neural é de 1943. O <Ref to="perceptron">perceptron</Ref> é de 1958. O <Ref to="backpropagation">backpropagation</Ref>, de 1986. O <Ref to="transformer">Transformer</Ref>, de 2017.
+
+Ou seja: quase nada do que faz um LLM funcionar é conceitualmente novo. O que mudou foi escala. Três coisas aconteceram ao mesmo tempo:
+
+- **Dados**: a internet virou um corpus de trilhões de palavras que ninguém precisou anotar à mão.
+- **Compute**: GPUs feitas para jogos acabaram sendo exatamente o hardware certo para multiplicar matrizes gigantes.
+- **Arquitetura**: o Transformer permitiu treinar em paralelo, coisa que as redes recorrentes anteriores não permitiam.
+
+Junte os três e você tem <Ref to="leis-de-escala">leis de escala</Ref>: dá para prever quanto o modelo vai melhorar antes de gastar o dinheiro. Foi essa previsibilidade, mais que qualquer descoberta teórica, que soltou o investimento.
+
+<Callout type="trap">
+  "IA" não é uma tecnologia, é um rótulo de marketing colado em dezenas de técnicas diferentes. Um
+  detector de fraude com regressão logística, um robô aspirador e o ChatGPT não têm quase nada em
+  comum além do rótulo. Quando alguém disser "IA resolve isso", a pergunta útil é sempre: **qual
+  técnica, treinada em qual dado, avaliada como?**
+
+</Callout>
+
+## O que não mudou
+
+Nenhum modelo atual entende o mundo do jeito que uma pessoa entende. Um LLM é, no fundo, uma função estatística treinada para <Ref to="proximo-token">prever o próximo pedaço de texto</Ref>. Isso produz resultados espantosos e produz também <Ref to="alucinacao">erros confiantes</Ref>, pelo mesmo motivo.
+
+Vale carregar essa frase pelo curso inteiro: o modelo não sabe se está certo. Ele só sabe o que é provável.
+
+<Deep>
+Três distinções que economizam discussão em reunião técnica:
+
+**IA simbólica × conexionista.** A tradição simbólica (GOFAI) representa conhecimento como símbolos e regras manipuláveis: lógica de primeira ordem, sistemas especialistas, planejadores. A conexionista representa como pesos distribuídos numa rede. Praticamente tudo que funciona em produção hoje é conexionista, mas sistemas híbridos — LLM chamando um solver simbólico ou um banco de dados — são o padrão emergente em <Ref to="agentes">agentes</Ref>.
+
+**Discriminativo × generativo.** Um modelo discriminativo aprende $p(y \mid x)$: dada a foto, qual a classe. Um generativo aprende $p(x)$ ou $p(x \mid y)$: como o dado em si é distribuído, o que permite amostrar exemplos novos. Um LLM é generativo sobre sequências de tokens, e é por isso que ele consegue tanto classificar quanto escrever.
+
+**Aprendizado × inferência.** São dois regimes de custo completamente diferentes. Treinar um modelo de fronteira custa dezenas de milhões de dólares e acontece uma vez. Servir esse modelo custa frações de centavo por chamada e acontece bilhões de vezes. Otimizações de treino (paralelismo, precisão mista) e de <Ref to="quantizacao">inferência</Ref> (quantização, KV cache, batching) são áreas separadas com truques que não se aproveitam entre si.
+
+E uma nota histórica útil: o campo passou por dois "invernos da IA" (fim dos anos 70 e fim dos 80), ambos precedidos por promessas que a tecnologia da época não sustentava. Não é uma previsão sobre agora — é um lembrete de que a distância entre demo e produto já foi subestimada antes.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual das afirmações abaixo é correta?',
+      options: [
+        'Todo machine learning é deep learning',
+        'Todo deep learning é machine learning',
+        'IA generativa e machine learning são a mesma coisa',
+        'Deep learning substituiu completamente o machine learning clássico',
+      ],
+      answer: 1,
+      why: 'As caixas encaixam de fora para dentro: IA ⊃ machine learning ⊃ deep learning ⊃ IA generativa. Uma árvore de decisão é machine learning e não é deep learning. E ela ainda ganha de rede neural em muitos problemas de tabela.',
+    },
+    {
+      q: 'O que mais explica o salto de qualidade da IA depois de 2012?',
+      options: [
+        'Uma descoberta matemática inédita',
+        'Escala: mais dados, mais compute e uma arquitetura que paraleliza bem',
+        'Computadores quânticos',
+        'Um novo tipo de neurônio artificial',
+      ],
+      answer: 1,
+      why: 'Backpropagation é de 1986 e redes neurais são bem mais antigas. O que mudou foi a escala viável — GPUs baratas, a internet como corpus, e o Transformer permitindo treinar em paralelo.',
+    },
+    {
+      q: 'Uma empresa diz que usa IA para aprovar crédito com um conjunto de regras escritas por analistas. Isso é IA?',
+      options: [
+        'Não, porque não usa rede neural',
+        'Sim pela definição histórica do campo, mas não é machine learning: nada foi aprendido de dados',
+        'Sim, e também é machine learning',
+        'Só se as regras forem muitas',
+      ],
+      answer: 1,
+      why: 'Sistemas especialistas baseados em regras foram o centro da IA por décadas e continuam sendo IA pela definição do campo. Mas não há aprendizado: alguém escreveu as regras à mão. A distinção importa na hora de perguntar como o sistema foi avaliado.',
+    },
+  ]}
+/>

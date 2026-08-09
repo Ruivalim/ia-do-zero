@@ -1,0 +1,110 @@
+<TLDR>
+  Prompting não é magia: é **desenhar o contexto** em que o modelo prevê o próximo token. Zero-shot,
+  few-shot e chain-of-thought mudam coisas diferentes — formato, espaço para calcular, tom — e cada
+  uma tem custo.
+
+</TLDR>
+
+<Analogy>
+É como briefar um estagiário competente num dia ruim. Se você só diz "escreva o e-mail", ele improvisa. Se mostra três e-mails bons do time, ele copia o formato. Se pede "rascunhe o raciocínio antes", ele gasta papel pensando — e às vezes chega em resposta melhor. Se diz "você é o diretor jurídico", o tom muda; a competência, quase nunca.
+
+O modelo não "entende" o brief como pessoa. Ele continua a sequência mais provável dado o texto que você colocou na frente.
+
+</Analogy>
+
+## O que cada técnica realmente muda
+
+**Zero-shot** é a instrução crua: diga o que quer e o modelo responde. Funciona quando a tarefa é comum no pré-treino e o formato é óbvio.
+
+**<Term id="few-shot">Few-shot</Term>** coloca exemplos resolvidos no <Term id="prompt">prompt</Term>. O ganho principal não é ensinar fato novo — o modelo raramente "aprende" conteúdo dos exemplos. O ganho é **fixar formato, tom e o tipo de resposta esperada**. Três pares entrada→saída bem escolhidos valem mais que um parágrafo de regras contraditórias.
+
+**<Term id="cot">Chain-of-thought</Term>** (pedir raciocínio passo a passo) dá ao modelo **tokens de trabalho** antes da resposta final. Em tarefas de várias etapas, isso ajuda porque a geração é sequencial: o raciocínio escrito vira contexto para o token seguinte. Em tarefas triviais, só gasta.
+
+**Persona / papel** ("você é um revisor sênior") muda estilo e vocabulário. Raramente muda competência factual. Use quando o _como_ importa; não confie nela para o _o quê_.
+
+**Esquema de saída** (JSON com campos fixos, markdown com seções nomeadas) reduz ambiguidade para quem consome a resposta. Combine com few-shot mostrando o esquema preenchido.
+
+<Demo id="prompt-builder" />
+
+## Estrutura bate texto solto
+
+O modelo não tem um canal separado para "instrução" e "dado". Tudo vira a mesma sequência de <Term id="token">tokens</Term>. Por isso delimitadores importam: se o usuário cola um e-mail que parece instrução, o modelo pode obedecer ao e-mail.
+
+Prática estável:
+
+- Separe **instrução**, **contexto** e **dado de entrada** em blocos claros (markdown, XML, o que for — desde que seja **consistente**).
+- Prefira instrução positiva: "responda em uma frase" costuma funcionar melhor que "não seja prolixo".
+- Coloque o que não muda no começo e o que muda a cada chamada no fim — isso ajuda _prompt caching_ e leitura humana.
+
+## Custo: entrada barata, saída cara
+
+Few-shot paga em **toda** chamada, no lado da entrada: os exemplos viajam de novo e de novo. CoT paga na **saída**, que em geral custa bem mais por token, porque a geração é sequencial.
+
+Escolha com o bolso na mão: se o formato é estável, few-shot curto ou um esquema fixo. Se a tarefa exige cálculo multi-passo e o erro custa caro, CoT (ou um modelo com raciocínio embutido) pode valer. Se você só quer tom, persona barata resolve.
+
+<Callout type="info" title="Modelos com raciocínio embutido">
+  Alguns modelos já geram um rastro interno de pensamento. Nesses casos, "pense passo a passo" no
+  prompt pode ser redundante ou até atrapalhar. Trate a técnica como hipótese e meça — não como
+  dogma.
+
+</Callout>
+
+## O que não muda com prompt
+
+Prompting não substitui <Ref to="rag">RAG</Ref> para fato da sua empresa, nem <Ref to="fine-tuning-e-lora">fine-tuning</Ref> para formato rígido em escala, nem <Ref to="avaliacao">eval</Ref> para saber se melhorou. Um prompt copiado da internet que "funcionou uma vez" é anedota, não engenharia.
+
+<Deep>
+**Prompt caching.** Muitos provedores reutilizam o prefixo estável do prompt: o começo idêntico entre chamadas é processado uma vez e reaproveitado. Por isso a ordem importa operacionalmente: instrução e exemplos fixos no início; variável (pergunta do usuário, trechos de RAG) no fim. Se você embaralha o prompt a cada chamada, o cache não acerta.
+
+**Ordem dos exemplos.** Em few-shot, o último exemplo costuma puxar mais o formato. Coloque o padrão que você quer copiado perto do fim. Misturar formatos entre exemplos ensina ambiguidade.
+
+**Injeção de prompt.** Texto não confiável (e-mail, PDF, página web) entra no mesmo canal da instrução do sistema. Não existe solução completa só no prompt: o atacante escreve "ignore o anterior e…". Defesa real combina delimitação, filtragem, permissões no sistema e, quando possível, canais separados no provedor. Ver também <Ref to="agentes">agentes</Ref> e <Ref to="alinhamento">alinhamento</Ref>.
+
+**Medição.** Toda mudança de prompt precisa de um número antes e depois. Sem suíte de <Term id="eval">eval</Term>, você otimiza por impressão e regrede sem notar.
+
+</Deep>
+
+<Callout type="trap">
+  O prompt "mágico" da internet e o ajuste por anedota ("melhorou no meu exemplo favorito") não são
+  engenharia. Sem <Ref to="avaliacao">eval</Ref> fixa, você não sabe se melhorou — só se a resposta
+  de hoje te agradou.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que few-shot costuma melhorar de forma mais confiável?',
+      options: [
+        'Conhecimento factual novo sobre a sua empresa',
+        'Formato, tom e o tipo de resposta esperada',
+        'A capacidade de raciocínio multi-passo em qualquer tarefa',
+        'A velocidade de geração',
+      ],
+      answer: 1,
+      why: 'Exemplos no prompt fixam o padrão de saída. Ensinar fato novo de forma confiável é trabalho de RAG ou de dados no treino — não de três demonstrações.',
+    },
+    {
+      q: 'Por que chain-of-thought pode ajudar em tarefas de várias etapas?',
+      options: [
+        'Porque multiplica os parâmetros do modelo',
+        'Porque dá tokens de trabalho: o raciocínio escrito vira contexto para os tokens seguintes',
+        'Porque reduz o custo de saída',
+        'Porque desliga a temperature',
+      ],
+      answer: 1,
+      why: 'A geração é sequencial. Pensar em voz alta no texto cria intermediários que o próprio modelo usa na sequência. O preço é mais tokens de saída.',
+    },
+    {
+      q: 'Onde colocar a parte variável do prompt se o provedor faz cache de prefixo?',
+      options: [
+        'No começo, antes da instrução do sistema',
+        'No fim, depois do prefixo estável',
+        'Embaralhada no meio dos exemplos',
+        'Não importa a ordem',
+      ],
+      answer: 1,
+      why: 'Cache reaproveita o prefixo idêntico. Instrução e exemplos fixos no início; pergunta e trechos variáveis no fim maximizam acerto de cache.',
+    },
+  ]}
+/>

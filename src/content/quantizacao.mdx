@@ -1,0 +1,112 @@
+<TLDR>
+  Quantização é guardar os <Term id="parametro">pesos</Term> com **menos bits**. Memória e banda
+  caem; a qualidade cai um pouco — e de forma desigual entre tarefas. Na geração token a token, o
+  gargalo costuma ser memória, não FLOPs.
+
+</TLDR>
+
+<Analogy>
+  É comprimir a partitura que a orquestra carrega na mochila. Em vez de cada nota com precisão
+  absurda, você arredonda. A melodia continua reconhecível; passagens muito sutis sofrem. A
+  orquestra anda mais leve e monta o palco mais rápido — desde que o arranjo (o método de
+  quantização) seja decente.
+
+</Analogy>
+
+## Menos bits, menos bytes
+
+Um peso em FP16 ocupa 2 bytes; em INT8, 1; em INT4, meio byte. Multiplique pelo número de parâmetros e pela overhead do runtime: a diferença entre "não cabe na GPU" e "roda local" muitas vezes é só isso.
+
+A qualidade não despenca na mesma proporção. Com bom método, **8 bits** costuma ser quase transparente para muita aplicação. **4 bits** é utilizável em amplo espectro se o esquema for moderno e bem calibrado. Abaixo disso a degradação acelera e fica caprichosa: uma tarefa mal se mexe, outra (código sutil, raciocínio longo, idioma menos representado) desaba.
+
+<Demo id="quantization" />
+
+## Por que acelera a geração
+
+Na <Term id="inferencia">inferência</Term> autoregressiva, a cada token o hardware precisa **ler** uma fração enorme dos pesos (e do <Term id="kv-cache">KV cache</Term>). O limite frequente é **banda de memória**, não a capacidade bruta de multiplicar matrizes. Menos bytes para ler por token → mais tokens por segundo, além de caber em hardware menor.
+
+Treino é outra história (gradientes, estados de otimizador, ativações). Aqui o foco é servir e rodar local.
+
+## Escala por grupo, não um único régua
+
+Quantizar "uma escala para a matriz inteira" é bruto: outliers forçam o resto a perder resolução. **Group size** (uma escala por grupo de N pesos) reduz o erro sem voltar a FP16. Grupos menores ≈ mais fiéis e um pouco mais de metadados de escala.
+
+Outros knobs do mesmo universo: quantização por canal, tipos com mais bits em camadas sensíveis, e deixar algumas matrizes em precisão alta.
+
+## Três quantizações diferentes
+
+Não misture os problemas:
+
+| Alvo          | O que encolhe                      | Efeito típico                                            |
+| ------------- | ---------------------------------- | -------------------------------------------------------- |
+| **Pesos**     | Parâmetros no disco/GPU            | Cabe modelo maior; leve perda de qualidade               |
+| **Ativações** | Tensores intermediários em runtime | Mais hard; outliers atrapalham                           |
+| **KV cache**  | Memória da geração longa           | Contextos longos cabem; qualidade de atenção pode sofrer |
+
+Pesos em 4 bits com ativações em precisão maior é combinação comum. Quantizar KV é decisão separada, crítica em chat com histórico enorme.
+
+## Regras práticas
+
+- Prefira método maduro e calibração com dados parecidos com o uso real.
+- Avalie na **sua** tarefa e nas fatias que importam — não só numa métrica genérica de linguagem.
+- Compare com o modelo menor em precisão cheia: às vezes um modelo menor sem quantizar ganha de um grande esmagado demais.
+- <Term id="destilacao">Destilação</Term> (aluno pequeno imitando professor grande) é caminho
+  paralelo quando a meta é modelo nativo leve, não só comprimir o gigante.
+
+<Deep>
+**Pós-treino vs ciente de quantização.** A rota comum é quantizar **depois** do treino (PTQ), com ou sem calibração. Treino ciente de quantização (QAT) simula low-bit no forward e costuma recuperar qualidade — com custo de treino. QLoRA e afins misturam base quantizada com adaptadores em precisão maior: ver <Ref to="fine-tuning-e-lora">LoRA</Ref>.
+
+**Outliers de ativação.** Alguns canais de ativação têm magnitudes absurdas e estragam a grade de quantização se tratados iguais aos demais. Métodos modernos isolam ou rescalam esses canais; ignorar isso é o motivo de "INT8 ingênuo" falhar em transformers grandes.
+
+**Formatos na prática.** Ecossistemas de pesos open-source e runtimes locais expõem famílias de formatos com tradeoffs de velocidade, qualidade e suporte de hardware. O detalhe muda rápido; o princípio não: bits × parâmetros + overhead + KV.
+
+**Conta de memória (ordem de grandeza).** Memória de pesos ≈ parâmetros × bytes_por_peso. Some ativações, fragmentação do alocador e KV cache (cresce com camadas × sequências × dimensão × bits do cache). Contexto longo dói no KV mesmo com pesos enxutos.
+
+**Perplexidade mentirosa.** Queda mínima de perplexidade pode coexistir com colapso em benchmark de código ou em subtarefas de raciocínio. Meça o que o produto precisa — com <Ref to="avaliacao">eval</Ref> própria.
+
+</Deep>
+
+<Callout type="trap">
+  Avaliar o modelo quantizado só com perplexidade (ou só com um chat informal). A métrica genérica
+  mal se mexe enquanto capacidades específicas degradam. Avalie na sua tarefa, nas suas fatias, com
+  a mesma suíte do modelo base.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que quantizar pesos costuma acelerar a geração de tokens?',
+      options: [
+        'Porque aumenta a temperature',
+        'Porque na geração o gargalo costuma ser banda de memória: menos bytes para ler por passo',
+        'Porque reduz o vocabulário',
+        'Porque desliga o softmax',
+      ],
+      answer: 1,
+      why: 'Autoregressão relê pesos a cada token. Menos bits → menos tráfego de memória → mais tokens/s e menor footprint.',
+    },
+    {
+      q: 'O que group size melhora na quantização?',
+      options: [
+        'Elimina a necessidade de eval',
+        'Reduz erro ao usar escalas locais em vez de uma única escala para a matriz inteira',
+        'Aumenta o número de parâmetros',
+        'Torna o treino não supervisionado',
+      ],
+      answer: 1,
+      why: 'Escalas por grupo preservam resolução quando há variação local e outliers; escala global é grossa demais.',
+    },
+    {
+      q: 'Quantização de peso, de ativação e de KV cache são o mesmo problema?',
+      options: [
+        'Sim, um único switch resolve os três',
+        'Não: alvos e tradeoffs diferentes, embora todos mexam em precisão numérica',
+        'Só KV importa',
+        'Só ativação importa em inferência',
+      ],
+      answer: 1,
+      why: 'Pesos dominam o tamanho do modelo; ativações o runtime do forward; KV o custo de contexto longo. Técnicas e riscos divergem.',
+    },
+  ]}
+/>

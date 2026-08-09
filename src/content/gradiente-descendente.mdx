@@ -1,0 +1,112 @@
+<TLDR>
+  Gradiente descendente reduz a perda dando passos na direção oposta à subida mais íngreme. O
+  tamanho desses passos, a <Term id="learning-rate">learning rate</Term>, decide se o treino
+  **avança, rasteja ou explode**.
+
+</TLDR>
+
+<Analogy>
+Você desce uma montanha coberta de neblina. Não enxerga o vale, mas sente a inclinação sob os pés. Dá um passo para o lado que desce e mede de novo.
+
+Passos minúsculos tornam a viagem interminável. Passos enormes atravessam o vale, sobem do outro lado e podem se afastar cada vez mais. A inclinação informa direção, não o passo seguro.
+
+</Analogy>
+
+## Descer sem ver a superfície inteira
+
+A perda depende de todos os parâmetros do modelo. O gradiente reúne as derivadas em cada direção e aponta o aumento local mais rápido. O otimizador usa o sentido contrário para tentar reduzir a perda.
+
+Isso é informação local. Uma descida agora não garante o melhor destino global. Mesmo assim, repetir medidas e passos encontra soluções úteis em espaços grandes demais para examinar diretamente.
+
+<Demo id="gradient-descent" />
+
+No demo, uma learning rate pequena exige muitos passos. Uma grande oscila entre os lados do vale ou diverge. O valor adequado depende da curvatura, da escala dos dados, do tamanho do lote e do otimizador. Por isso ele costuma ser o hiperparâmetro mais sensível.
+
+## Quanto dado entra em cada passo
+
+Batch gradient descent calcula o gradiente usando todo o conjunto. A direção é estável, mas cada atualização custa caro e espera uma passagem completa pelos dados.
+
+Gradiente estocástico usa um exemplo por vez. Atualiza rápido, porém cada direção contém muito ruído. Mini-batch fica entre os dois: aproveita multiplicações eficientes em hardware e reduz parte da variação sem exigir o dataset inteiro.
+
+O ruído não é apenas defeito. Ele pode tirar a trajetória de regiões planas e evitar ajuste excessivamente rígido à superfície média do treino. Lotes muito grandes mudam essa dinâmica e normalmente pedem ajuste de learning rate e agenda.
+
+## Inércia e adaptação
+
+Momentum acumula uma média das direções recentes. Em uma ravina estreita, oscilações laterais se cancelam enquanto a direção persistente ganha velocidade. Em platôs, a inércia mantém movimento mesmo quando o gradiente instantâneo é pequeno.
+
+Adam combina momentum com uma escala adaptativa por parâmetro baseada no histórico dos gradientes ao quadrado. Ele costuma facilitar o início do treino em problemas com escalas diferentes. A conveniência custa memória: além dos parâmetros e gradientes, mantém dois estados por parâmetro.
+
+<Callout type="trap">
+  Perda que vira NaN costuma apontar primeiro para learning rate alta, dados não normalizados ou
+  operações numericamente instáveis. Antes de culpar a arquitetura, inspecione entradas, logits,
+  norma do gradiente e o primeiro passo em que aparece valor não finito.
+
+</Callout>
+
+## A learning rate muda durante o treino
+
+Uma taxa constante raramente é ideal do começo ao fim. No início, passos maiores atravessam regiões pouco informativas. Perto de uma solução, passos menores refinam sem oscilar. Agendas de decaimento reduzem a taxa ao longo do treino.
+
+Transformers costumam usar warmup: a taxa começa pequena e cresce por um trecho antes do decaimento. No início, ativações, normalizações e estados do otimizador ainda estão se organizando; um passo cheio pode desestabilizar tudo. Warmup reduz esse choque, mas não substitui inicialização e escala corretas.
+
+<Deep>
+O passo básico é
+
+$$
+\theta_{t+1}=\theta_t-\eta_t\nabla_\theta\mathcal{L}(\theta_t)
+$$
+
+Momentum introduz uma velocidade, enquanto Adam mantém médias móveis do primeiro e do segundo momento do gradiente, com correção do viés inicial. Esses estados têm o mesmo formato dos parâmetros. Em precisão completa, o custo de memória do otimizador pode superar o dos próprios pesos; treino em precisão mista ainda pode manter cópias de maior precisão.
+
+Superfícies de redes profundas são não convexas. Em dimensão alta, pontos onde o gradiente zera são frequentemente selas: há direções de subida e descida misturadas. Platôs e curvaturas muito diferentes costumam ser obstáculos mais presentes que um pequeno mínimo local perfeitamente isolado. Isso é uma descrição empírica do regime, não garantia de convergência global.
+
+Gradient clipping limita a norma do gradiente ou cada componente antes da atualização. Ele evita que um lote excepcional produza um salto destrutivo, especialmente em sequências. Clipping não corrige uma learning rate sistematicamente errada nem remove a origem de valores não finitos.
+
+O estado duplo do Adam ajuda a explicar o custo de ajustar modelos enormes. Técnicas como <Ref to="fine-tuning-e-lora">LoRA</Ref> congelam os pesos principais e treinam matrizes menores. Assim, gradientes e estados do otimizador existem apenas para uma fração dos parâmetros, reduzindo memória muito além da contagem dos novos pesos.
+
+</Deep>
+
+<Callout type="info">
+  Registre perda, learning rate e norma do gradiente na mesma escala temporal. Uma curva de perda
+  sozinha mostra que algo falhou; as outras duas ajudam a localizar se o passo, o sinal ou o dado
+  causou a falha.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que o passo segue o negativo do gradiente?',
+      options: [
+        'Porque o gradiente aponta a subida local mais íngreme',
+        'Porque todo parâmetro precisa ficar negativo',
+        'Porque isso aumenta a perda antes de diminuir',
+        'Porque elimina a necessidade de validação',
+      ],
+      answer: 0,
+      why: 'O gradiente aponta onde a função cresce localmente. Trocar o sinal produz a direção local de maior descida.',
+    },
+    {
+      q: 'Qual é uma vantagem do mini-batch?',
+      options: [
+        'Produzir sempre o gradiente exato do dataset',
+        'Equilibrar eficiência de hardware e ruído útil nas atualizações',
+        'Eliminar a learning rate',
+        'Não precisar guardar parâmetros',
+      ],
+      answer: 1,
+      why: 'Mini-batches permitem cálculo vetorizado sem esperar todo o conjunto e mantêm alguma variação estocástica entre passos.',
+    },
+    {
+      q: 'Qual custo adicional Adam traz?',
+      options: [
+        'Dois estados de otimizador por parâmetro',
+        'Uma cópia de todo o dataset por camada',
+        'Ausência de gradientes',
+        'Inferência necessariamente sequencial',
+      ],
+      answer: 0,
+      why: 'Adam acompanha médias do gradiente e do gradiente ao quadrado para cada parâmetro. Esse estado adicional pesa na memória de treino.',
+    },
+  ]}
+/>

@@ -1,0 +1,112 @@
+<TLDR>
+  Todo modelo enxerga o mundo como uma tabela de números que **alguém escolheu**. Cada linha é um
+  exemplo, cada coluna é uma <Term id="feature">feature</Term>, e a coluna que você quer prever é o{' '}
+  <Term id="rotulo">rótulo</Term>. A qualidade dessa escolha limita tudo que vem depois.
+
+</TLDR>
+
+<Analogy>
+Um médico avaliando um paciente não usa "o paciente inteiro". Ele usa temperatura, pressão, idade, o que o paciente relatou, o resultado de dois exames. Ele reduziu uma pessoa a uma dúzia de números e frases.
+
+Um modelo faz igual, com uma diferença cruel: ele só tem os números que você deu. Se você esqueceu de incluir "o paciente é fumante", esse fato simplesmente não existe no universo do modelo. Ele não pode perguntar.
+
+</Analogy>
+
+## A tabela
+
+O formato canônico do machine learning supervisionado é uma matriz:
+
+- **Linha** = um exemplo, uma observação, uma amostra. Um cliente, uma foto, uma transação.
+- **Coluna de entrada** = uma feature. Idade, valor da compra, intensidade do pixel 47.
+- **Coluna de saída** = o rótulo. O que você quer prever.
+
+Chamam a matriz de entrada de $X$ e o vetor de rótulos de $y$. Praticamente toda biblioteca do mundo usa essa notação.
+
+<Demo id="feature-space" />
+
+## Features boas e features inúteis
+
+Brinque com o demo acima trocando os eixos. Duas features boas separam as classes visualmente, sozinhas, sem modelo nenhum. Duas ruins deixam tudo embolado — e nenhum algoritmo salva isso. Modelo não inventa informação que não está no dado.
+
+Isso leva a uma regra que vale para a carreira inteira:
+
+> Tempo gasto conseguindo uma feature nova e relevante rende mais que tempo gasto trocando de algoritmo.
+
+Em problemas de tabela isso se chama **feature engineering**: criar colunas derivadas que expõem o que o modelo teria dificuldade de descobrir. Data e hora viram "dia da semana" e "é feriado". Latitude e longitude viram "distância até o centro". Valor e limite viram "percentual do limite usado".
+
+<Callout type="info" title="Por que deep learning mudou isso — só em parte">
+Em imagem, áudio e texto, redes profundas aprendem as features sozinhas: as primeiras camadas de uma <Ref to="cnn">CNN</Ref> descobrem bordas, as seguintes descobrem texturas, e ninguém programou isso. É a grande vitória do deep learning.
+
+Em dados tabulares, o quadro é outro. Modelos de árvore com boas features ainda batem redes neurais na maioria dos casos. "Deep learning acabou com feature engineering" é verdade para pixels e falso para a planilha do seu ERP.
+
+</Callout>
+
+## Tipos de coluna e como tratá-los
+
+Modelos comem número. Tudo precisa virar número, e o jeito de converter importa:
+
+- **Numérica contínua** (idade, preço): geralmente precisa ser escalonada. Se uma coluna vai de 0 a 1 e outra de 0 a 500 000, algoritmos baseados em distância — como <Ref to="knn">KNN</Ref> — vão ouvir só a segunda.
+- **Categórica sem ordem** (cidade, cor): vira _one-hot_, uma coluna binária por valor. Nunca codifique como 1, 2, 3 — você estaria dizendo que "azul" é maior que "verde" e fica na metade do caminho até "roxo".
+- **Categórica com ordem** (pequeno < médio < grande): aí sim, número ordenado faz sentido.
+- **Texto**: vira <Ref to="embeddings">embedding</Ref>, ou contagem de palavras nas abordagens clássicas.
+- **Faltante**: não é um número. Precisa de decisão explícita — preencher com a mediana, criar uma coluna "estava faltando", ou descartar a linha. Ignorar não é opção.
+
+<Callout type="trap">
+A pior feature possível é a que **vaza o futuro**. Prever "o cliente vai cancelar" usando a coluna "data do cancelamento" dá 100% de acurácia no teste e 0% de utilidade, porque na hora de usar o modelo essa coluna ainda está vazia.
+
+Vazamento raramente é óbvio assim. Aparece disfarçado: uma média calculada sobre o dataset inteiro antes do split, um ID que por acaso é sequencial por classe, um campo preenchido pelo mesmo processo que decide o rótulo. Sempre que a acurácia vier suspeita de boa, procure o vazamento antes de comemorar.
+
+</Callout>
+
+<Deep>
+Alguns detalhes que separam quem já apanhou de quem ainda vai apanhar:
+
+**Escalonamento.** Padronização ($z = (x-\mu)/\sigma$) é o padrão; normalização min-max serve quando você precisa do intervalo $[0,1]$. Regra de ouro: calcule $\mu$ e $\sigma$ **só no conjunto de treino** e aplique os mesmos valores no teste. Calcular sobre tudo é vazamento, pequeno mas real.
+
+**Cardinalidade alta.** One-hot em uma coluna com 50 mil CEPs cria 50 mil colunas. Alternativas: _target encoding_ (substituir a categoria pela média do rótulo naquela categoria, com suavização e calculado dentro do fold, senão vaza), hashing trick, ou embeddings aprendidos.
+
+**Maldição da dimensionalidade.** Em espaços de dimensão alta, a distância entre pontos converge — todo mundo fica mais ou menos igualmente longe de todo mundo. Isso arrasa métodos baseados em distância e explica por que reduzir dimensionalidade às vezes _melhora_ o resultado em vez de só acelerar.
+
+**O rótulo também é dado sujo.** Em conjuntos famosos de visão, auditorias encontram erros de rotulagem na casa de alguns por cento. Se o seu modelo tem 97% de acurácia num dataset com 3% de rótulos errados, você não sabe mais o que está medindo. Concordância entre anotadores (kappa de Cohen) deveria ser reportada bem mais do que é.
+
+**Distribuição muda.** O dado de treino é uma foto de um momento. Comportamento de cliente, preço, linguagem — tudo se move. Um modelo em produção sem monitoramento de _drift_ está apodrecendo em silêncio.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: "Você codifica a coluna 'cidade' como São Paulo=1, Rio=2, Recife=3. Qual o problema?",
+      options: [
+        'Nenhum, é mais eficiente que one-hot',
+        "Você inventou uma ordem e uma distância que não existem: o modelo passa a achar que Rio fica 'entre' São Paulo e Recife",
+        'Números inteiros não são aceitos por modelos',
+        'Só funciona com redes neurais',
+      ],
+      answer: 1,
+      why: "Categórica sem ordem codificada como número vira uma escala falsa. O modelo vai tratar Recife como 'três vezes São Paulo'. One-hot resolve criando uma coluna binária por valor.",
+    },
+    {
+      q: 'Seu modelo de previsão de cancelamento acerta 99,8% no teste. Qual é a primeira hipótese a investigar?',
+      options: [
+        'O modelo é excelente, pode subir para produção',
+        'Vazamento de dados: alguma feature carrega informação que só existe depois do fato',
+        'Faltou aumentar o número de épocas',
+        'O learning rate está alto',
+      ],
+      answer: 1,
+      why: 'Acurácia quase perfeita em problema de negócio real é sintoma, não conquista. Quase sempre há uma coluna que só é preenchida depois que o evento aconteceu.',
+    },
+    {
+      q: 'Em qual desses casos o deep learning dispensa feature engineering?',
+      options: [
+        'Previsão de churn a partir de uma tabela de 40 colunas do CRM',
+        'Classificação de imagens de raio-X',
+        'Score de crédito com dados cadastrais',
+        'Previsão de demanda com histórico de vendas em planilha',
+      ],
+      answer: 1,
+      why: 'Em pixels, áudio e texto as camadas aprendem as features sozinhas — é onde o deep learning ganhou. Em dados tabulares, boas features criadas à mão mais modelos de árvore continuam sendo o padrão que vence.',
+    },
+  ]}
+/>

@@ -1,0 +1,109 @@
+<TLDR>
+  KNN classifica um exemplo procurando os pontos conhecidos mais próximos e deixando-os votar. Ele
+  praticamente não treina: **o dataset é o modelo**, e o custo aparece quando chega uma consulta.
+
+</TLDR>
+
+<Analogy>
+Você chega a uma cidade desconhecida e quer saber se um bairro é mais residencial ou comercial. Em vez de aprender uma regra sobre a cidade inteira, olha os endereços ao redor. Se quase todos são lojas, chama a área de comercial.
+
+Olhar só a porta ao lado deixa uma exceção decidir. Olhar metade da cidade apaga o caráter local. O número de vizinhos define esse equilíbrio.
+
+</Analogy>
+
+## Aprender por semelhança
+
+K-nearest neighbors guarda os exemplos de treino. Para classificar um ponto novo, calcula sua distância até os exemplos, seleciona os k mais próximos e usa a classe majoritária. Em regressão, troca a votação por média dos alvos próximos.
+
+Não há uma fase longa de ajuste de parâmetros. Treinar significa armazenar e organizar dados. A inferência faz o trabalho pesado: comparar a consulta com muitos pontos e ordenar ou selecionar as menores distâncias. É o oposto de uma rede neural, que concentra custo no treino e responde com uma sequência fixa de operações.
+
+<Demo id="knn" />
+
+Com k pequeno, a fronteira contorna detalhes e pode mudar por causa de um rótulo errado. É baixa suavização e alta variância. Com k grande, a maioria global invade regiões menores. A fronteira fica lisa, mas grupos legítimos desaparecem. A escolha de k pertence à validação.
+
+## Distância depende de escala
+
+Imagine duas features: idade em décadas e renda em unidades monetárias. Uma diferença comum na segunda pode ser numericamente muito maior que toda a variação da primeira. A distância euclidiana passa a ser quase só distância de renda, mesmo que idade seja importante.
+
+Padronizar ou normalizar coloca as colunas em escalas comparáveis. A transformação deve ser ajustada no treino, nunca no dataset completo. Também não basta escalar mecanicamente: uma variável irrelevante ainda adiciona ruído à distância, e uma categoria codificada por números pode criar uma ordem inexistente.
+
+## Quando perto deixa de significar parecido
+
+Em dimensão alta, o espaço cresce depressa e os dados ficam esparsos. Para encontrar vizinhos, é preciso cobrir uma região cada vez maior. Distâncias ao ponto mais próximo e ao mais distante tornam-se relativamente parecidas. A ideia de localidade perde contraste.
+
+Essa é a maldição da dimensionalidade. Ela aparece em imagens cruas, texto com vocabulário enorme e tabelas com muitas colunas. Seleção de features, redução de dimensionalidade ou embeddings aprendidos podem criar um espaço onde proximidade volte a representar semelhança útil.
+
+<Callout type="trap">
+  Aplicar KNN diretamente em milhares de dimensões, com features não escaladas, e concluir que o
+  algoritmo é ruim testa principalmente uma representação ruim. Antes de julgar KNN, verifique se a
+  métrica, a escala e o espaço tornam vizinhos semanticamente comparáveis.
+
+</Callout>
+
+## A métrica é parte do modelo
+
+Distância euclidiana favorece proximidade geométrica comum. Manhattan soma diferenças absolutas e pode ser mais robusta a uma coordenada discrepante. Cosseno compara direção e ignora magnitude, algo útil para vetores de texto. Para features mistas, talvez nenhuma delas faça sentido sem uma transformação cuidadosa.
+
+Vizinhos também podem votar com pesos diferentes. Dar mais peso aos mais próximos evita que um ponto quase colado perca para vários pontos na borda da vizinhança. Mas um rótulo errado muito próximo ganha ainda mais poder. A ponderação muda o compromisso entre sensibilidade local e robustez.
+
+<Deep>
+Para consulta $x$ e conjunto de índices dos k vizinhos mais próximos $N_k(x)$, a classificação simples escolhe
+
+$$
+\hat y = \arg\max_c \sum_{i \in N_k(x)} \mathbf{1}[y_i=c]
+$$
+
+Na versão ponderada, cada voto recebe peso, frequentemente inverso à distância com um pequeno termo de estabilidade. Se há distância zero, trate correspondências exatas separadamente para evitar divisão inválida.
+
+Uma busca exata ingênua custa proporcionalmente ao número de exemplos vezes a dimensão por consulta. KD-trees dividem o espaço por eixos; ball trees organizam regiões por raios e aceitam mais métricas. As duas podam comparações quando a geometria tem dimensão efetiva baixa. Em dimensão alta, quase todos os ramos parecem candidatos e o ganho desaparece.
+
+Sistemas grandes usam busca aproximada de vizinhos. Eles aceitam perder ocasionalmente o vizinho exato para reduzir latência e memória. Índices em grafos, quantização e particionamento transformam a busca em engenharia de recuperação, com um trade-off explícito entre recall e custo.
+
+Essa é a ligação direta com <Ref to="rag">RAG</Ref>. Um documento vira embedding; a consulta vira vetor no mesmo espaço; o sistema recupera os vizinhos mais próximos e entrega seus textos ao modelo. Em produção, isso é KNN aproximado sobre uma representação aprendida. A qualidade depende tanto do embedding e da métrica quanto do índice.
+
+</Deep>
+
+<Callout type="info">
+  KNN fornece uma explicação local concreta: estes exemplos votaram. Isso ajuda a inspecionar o
+  resultado, mas não garante justiça. Se o dataset contém regiões mal representadas ou rótulos
+  enviesados, os vizinhos tornam esse problema operacional.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Onde se concentra o custo do KNN?',
+      options: [
+        'No treino de milhares de pesos',
+        'Na inferência, ao procurar vizinhos entre os exemplos guardados',
+        'Na criação dos rótulos durante a consulta',
+        'Somente na padronização',
+      ],
+      answer: 1,
+      why: 'KNN quase não ajusta parâmetros. Cada consulta precisa comparar distâncias e localizar os exemplos mais próximos.',
+    },
+    {
+      q: 'O que tende a acontecer quando k é grande demais?',
+      options: [
+        'A fronteira memoriza cada ruído',
+        'A votação apaga estruturas locais e favorece a maioria ampla',
+        'A escala das features deixa de importar',
+        'O algoritmo vira regressão linear',
+      ],
+      answer: 1,
+      why: 'Uma vizinhança muito ampla mistura regiões distintas. A decisão fica suave, mas pode perder grupos pequenos e legítimos.',
+    },
+    {
+      q: 'Por que padronizar features antes do KNN?',
+      options: [
+        'Para garantir causalidade',
+        'Para impedir que a coluna de maior amplitude domine a distância',
+        'Para reduzir o número de rótulos',
+        'Para criar uma árvore de decisão',
+      ],
+      answer: 1,
+      why: 'Distância opera sobre magnitudes numéricas. Sem escalas comparáveis, uma coluna pode decidir quase tudo apenas por usar unidades maiores.',
+    },
+  ]}
+/>

@@ -1,0 +1,122 @@
+<TLDR>
+  Self-attention deixa cada token olhar para todos os outros da sequência e **puxar informação dos
+  que interessam**. É o mecanismo que resolve "ela" apontando para "a caixa" quatro palavras atrás.
+
+</TLDR>
+
+<Analogy>
+Uma sala de reunião. Cada pessoa levanta uma plaquinha dizendo o que está procurando ("preciso saber quem é o sujeito desta frase") e outra dizendo o que tem a oferecer ("sou um substantivo feminino singular").
+
+Todo mundo lê as plaquinhas de todo mundo. Cada pessoa então monta seu resumo pessoal misturando o que ouviu, dando mais peso a quem tinha exatamente o que ela procurava. Ninguém precisa passar recado em cadeia: todos falam com todos, de uma vez.
+
+As plaquinhas são a **query** e a **key**. O que a pessoa efetivamente entrega quando é escolhida é o **value**.
+
+</Analogy>
+
+<Demo id="attention" />
+
+## Query, key, value
+
+Cada token entra na camada como um vetor. Três matrizes aprendidas transformam esse mesmo vetor em três papéis diferentes:
+
+<Steps
+  items={[
+    [
+      'Query (Q)',
+      'O que este token está procurando no restante da frase. Um pronome procura seu referente; um verbo procura seu sujeito.',
+    ],
+    ['Key (K)', 'O que este token oferece a quem procurar. Uma espécie de etiqueta de conteúdo.'],
+    ['Value (V)', 'A informação que efetivamente será entregue se este token for escolhido.'],
+  ]}
+/>
+
+Para cada par de tokens, calcula-se o produto interno entre a query de um e a key do outro: um número de "quanto isto casa". Passa-se a linha inteira por <Term id="softmax">softmax</Term>, virando pesos que somam 1. O novo vetor do token é a média dos values ponderada por esses pesos.
+
+Uma frase resume tudo: **cada token vira uma mistura ponderada dos outros, e ele mesmo decide os pesos.**
+
+## Por que isso venceu as RNNs
+
+Uma <Ref to="rnn-e-sequencias">rede recorrente</Ref> lê em ordem, carregando um estado. Para o token 50 usar informação do token 1, o sinal precisa sobreviver a 49 multiplicações — e <Ref to="rnn-e-sequencias">geralmente não sobrevive</Ref>. Além disso, o passo 50 depende do 49, o que impede paralelizar o treino.
+
+Attention resolve os dois de uma vez:
+
+- **Caminho de comprimento 1.** Qualquer token acessa qualquer outro diretamente. Não há distância a atravessar.
+- **Tudo em paralelo.** Todos os pares são calculados de uma vez, como uma multiplicação de matrizes. É exatamente a operação em que GPUs são absurdamente rápidas.
+
+Esse segundo ponto é o que realmente destravou a escala. Não foi um mecanismo mais inteligente; foi um mecanismo que o hardware da época adorava.
+
+## Múltiplas cabeças
+
+Uma só atenção teria que decidir um único critério de relevância por camada. Na prática o modelo usa várias em paralelo — **múltiplas cabeças** —, cada uma com suas próprias matrizes Q, K, V e um pedaço da dimensão total.
+
+Cabeças diferentes acabam se especializando: algumas em concordância sintática, outras em olhar o token imediatamente anterior, outras em ligar aspas de abertura e fechamento. As saídas são concatenadas e projetadas de volta. Alterne as cabeças no demo para ver padrões bem diferentes sobre a mesma frase.
+
+<Callout type="trap" title="Attention não é explicação">
+É tentador olhar o mapa de calor e concluir "o modelo decidiu isso porque prestou atenção naquilo". A literatura mostra que pesos de atenção não são fiéis como explicação: dá para alterar bastante os pesos sem mudar a saída, e modelos com mapas de atenção muito diferentes podem produzir resultados idênticos.
+
+O mapa é uma janela útil para intuição — não é uma prova de causalidade.
+
+</Callout>
+
+## A máscara causal
+
+Um modelo que gera texto não pode olhar o futuro: durante o treino, a frase inteira está disponível, e se o token 3 puder ver o token 4, prever o token 4 vira cópia. A solução é zerar toda a metade da matriz acima da diagonal antes do softmax.
+
+Ligue e desligue a máscara no demo. Com ela, a matriz vira triangular — e é por isso que a geração é sequencial: cada token novo só depende dos anteriores.
+
+<Deep>
+A operação inteira cabe em uma linha:
+
+$$
+\operatorname{Attention}(Q,K,V) = \operatorname{softmax}\!\left(\frac{QK^{\top}}{\sqrt{d_k}}\right)V
+$$
+
+**Por que dividir por $\sqrt{d_k}$.** O produto interno de dois vetores aleatórios de dimensão $d_k$ tem variância proporcional a $d_k$. Sem a divisão, os logits crescem com a dimensão, o softmax satura, e o gradiente some. Essa raiz é uma correção de escala, não uma sutileza teórica.
+
+**Custo.** A matriz $QK^\top$ é $n \times n$: tempo e memória $O(n^2 d)$. Dobrar o contexto quadruplica a conta. É a razão de contexto longo ser caro mesmo quando cabe, e a motivação de todas as variantes: attention esparsa, janela deslizante, atenção linear. FlashAttention não muda a complexidade assintótica — ele evita materializar a matriz $n \times n$ na memória lenta, o que na prática vale muito mais.
+
+**KV cache.** Na geração, os keys e values dos tokens anteriores não mudam. Guardá-los evita reprocessar o prompt a cada token novo, transformando a geração em $O(n)$ por token em vez de $O(n^2)$. O preço é memória: o cache cresce linearmente com o contexto e com o número de camadas, e vira o gargalo real de servir modelos com janelas grandes. MQA e GQA (compartilhar keys e values entre cabeças) existem para encolher esse cache.
+
+**Attention não sabe ordem.** A operação é permutation-equivariant: embaralhe os tokens e a saída embaralha junto, sem mudar. Toda noção de posição vem de fora — codificação posicional somada aos embeddings, ou rotação aplicada a Q e K (RoPE), que é o padrão atual e o que permite extrapolar um pouco além do comprimento treinado.
+
+**Cross-attention.** Quando as queries vêm de uma sequência e as keys/values de outra, chama-se cross-attention. É como um decoder olha para o encoder em tradução, e como um modelo <Ref to="multimodal">multimodal</Ref> deixa o texto olhar para os patches da imagem.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que a máscara causal impede?',
+      options: [
+        'Que o modelo veja tokens futuros ao prever o próximo',
+        'Que o modelo repita palavras',
+        'Que o gradiente exploda',
+        'Que a atenção fique concentrada demais',
+      ],
+      answer: 0,
+      why: 'Durante o treino a frase inteira está disponível. Sem a máscara, prever o token seguinte seria copiar a resposta. A máscara zera a metade superior da matriz e torna a tarefa legítima.',
+    },
+    {
+      q: 'Por que o custo de attention cresce com o quadrado do comprimento?',
+      options: [
+        'Porque o vocabulário é grande',
+        'Porque cada token calcula um peso para cada outro token, formando uma matriz n×n',
+        'Porque há muitas camadas',
+        'Porque o softmax é caro',
+      ],
+      answer: 1,
+      why: 'São n² pares de tokens. Dobrar o contexto quadruplica os pares — e por isso todas as técnicas de contexto longo atacam exatamente essa matriz.',
+    },
+    {
+      q: 'Para que servem várias cabeças de atenção?',
+      options: [
+        'Para acelerar o cálculo',
+        'Para que o modelo mantenha vários critérios de relevância simultâneos na mesma camada',
+        'Para reduzir o número de parâmetros',
+        'Para evitar overfitting',
+      ],
+      answer: 1,
+      why: 'Uma cabeça só teria que escolher um único critério por camada. Com várias, umas cuidam de sintaxe, outras de posição, outras de ligações de longa distância — em paralelo.',
+    },
+  ]}
+/>

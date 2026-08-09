@@ -245,7 +245,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'rnn-e-sequencias',
     track: 't2',
     title: 'RNN e o problema da memória',
-    tagline: 'Redes que leem em ordem — e esquecem o começo da frase. Por que o Transformer venceu.',
+    tagline:
+      'Redes que leem em ordem — e esquecem o começo da frase. Por que o Transformer venceu.',
     min: 9,
     prereqs: ['backpropagation'],
     demo: 'vanishing-gradient',
@@ -347,7 +348,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'fine-tuning-e-lora',
     track: 't4',
     title: 'Fine-tuning, LoRA e quando não usar',
-    tagline: 'Treinar de novo é caro e raramente é a resposta. LoRA torna viável — pra alguns casos.',
+    tagline:
+      'Treinar de novo é caro e raramente é a resposta. LoRA torna viável — pra alguns casos.',
     min: 12,
     prereqs: ['rag'],
     demo: 'lora',
@@ -429,7 +431,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'multimodal',
     track: 't5',
     title: 'Multimodal',
-    tagline: 'Imagem, áudio e texto no mesmo espaço vetorial. Por isso dá pra conversar sobre foto.',
+    tagline:
+      'Imagem, áudio e texto no mesmo espaço vetorial. Por isso dá pra conversar sobre foto.',
     min: 9,
     prereqs: ['embeddings'],
     demo: 'multimodal-space',
@@ -464,9 +467,7 @@ export const CONCEPTS: Concept[] = [
 
 // ── índices derivados ───────────────────────────────────────────────────────
 
-export const BY_SLUG: Record<string, Concept> = Object.fromEntries(
-  CONCEPTS.map((c) => [c.slug, c]),
-)
+export const BY_SLUG: Record<string, Concept> = Object.fromEntries(CONCEPTS.map((c) => [c.slug, c]))
 
 export const TRACK_BY_ID: Record<TrackId, Track> = Object.fromEntries(
   TRACKS.map((t) => [t.id, t]),

@@ -22,8 +22,8 @@ export default function Home() {
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-muted">
           Do que é um dado até como um LLM escolhe a próxima palavra. Cada conceito tem uma
-          explicação curta, uma analogia, um demo que roda de verdade e uma camada técnica que
-          você abre só se quiser.
+          explicação curta, uma analogia, um demo que roda de verdade e uma camada técnica que você
+          abre só se quiser.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -120,8 +120,8 @@ export default function Home() {
             qualquer pessoa; no técnico abrem com fórmulas e detalhe de implementação.
           </li>
           <li>
-            <strong className="text-ink">Os demos são de verdade.</strong> Nenhum chama API. Tudo
-            é calculado no seu navegador, então dá pra mexer sem medo e sem custo.
+            <strong className="text-ink">Os demos são de verdade.</strong> Nenhum chama API. Tudo é
+            calculado no seu navegador, então dá pra mexer sem medo e sem custo.
           </li>
           <li>
             <strong className="text-ink">Não precisa seguir a ordem.</strong> Cada página lista os

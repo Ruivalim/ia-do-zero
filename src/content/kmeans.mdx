@@ -1,0 +1,112 @@
+<TLDR>
+  K-means divide pontos em k grupos alternando duas operações: atribuir cada ponto ao centro mais
+  próximo e mover cada centro para a média do grupo. **Ele encontra uma partição, não o significado
+  dela.**
+
+</TLDR>
+
+<Analogy>
+Você precisa instalar alguns pontos de encontro para pessoas espalhadas por uma cidade. Começa com locais provisórios. Cada pessoa escolhe o mais próximo; depois cada ponto muda para o centro médio das pessoas que o escolheram. As escolhas mudam, os centros mudam, e o ciclo se repete até estabilizar.
+
+Se os locais iniciais forem ruins, dois podem disputar o mesmo bairro e deixar outro sem boa cobertura.
+
+</Analogy>
+
+## Agrupar sem respostas prontas
+
+K-means é aprendizado não supervisionado: não há rótulo dizendo a qual grupo cada ponto pertence. Você fornece k, o algoritmo escolhe centros e tenta deixar cada ponto perto do centro de seu grupo.
+
+O procedimento alterna atribuição e atualização. Na primeira etapa, cada ponto recebe o índice do centro mais próximo. Na segunda, cada centro vira a média dos pontos atribuídos a ele. Cada etapa não aumenta a soma das distâncias quadráticas internas. Como há um número finito de atribuições, o processo termina.
+
+<Demo id="kmeans" />
+
+Terminar não significa encontrar a melhor divisão possível. K-means converge para um ótimo local. Centros iniciais diferentes produzem partições diferentes, especialmente quando os grupos se sobrepõem. K-means++ espalha as sementes iniciais para reduzir começos claramente ruins. Rodar várias vezes e ficar com a menor inércia também é prática básica.
+
+## Escolher k é a decisão difícil
+
+Com mais centros, a distância interna sempre cai. Se cada ponto pudesse ser seu próprio grupo, a inércia seria zero e o resultado não ensinaria nada. Portanto, minimizar inércia não escolhe k.
+
+O método do cotovelo procura o ponto em que acrescentar centros passa a trazer ganhos pequenos. A silhueta compara coesão dentro do grupo com separação em relação ao grupo vizinho. São heurísticas, não árbitros. Curvas sem cotovelo claro são comuns, e uma boa silhueta pode favorecer uma divisão pouco útil para o problema.
+
+Conhecimento de domínio fecha a decisão. Segmentos de clientes precisam levar a ações distintas. Grupos de documentos precisam permitir navegação ou busca melhor. Se k produz divisões estáveis, mas indistinguíveis na prática, a matemática encontrou estrutura sem valor operacional.
+
+## A forma que o algoritmo espera
+
+K-means funciona melhor com grupos aproximadamente esféricos, separados e de tamanho semelhante. Isso vem da distância euclidiana a um único centro e da média como representante. Um anel e seu miolo podem estar nitidamente separados aos olhos humanos, mas nenhum par de centros reproduz essa geometria.
+
+Grupos alongados, densidades muito diferentes e muitos outliers também causam problemas. DBSCAN procura regiões densas, aceita formatos arbitrários e marca ruído, embora exija uma noção adequada de densidade. Misturas de gaussianas representam grupos elípticos e atribuições probabilísticas. Nenhum método é universal; cada um embute uma definição de grupo.
+
+<Callout type="trap">
+  Rodar uma vez, ver cores bonitas e inventar perfis para cada grupo é análise narrativa, não
+  evidência. Troque a semente, repita o ajuste e verifique se as mesmas entidades continuam juntas.
+  Um segmento que some a cada inicialização não sustenta uma decisão de negócio.
+
+</Callout>
+
+## Avaliar sem gabarito
+
+Sem rótulos, não existe uma resposta única para conferir. Métricas internas medem propriedades geométricas escolhidas pelo próprio método. Estabilidade mede se pequenas perturbações preservam a partição. Avaliação externa, quando há um resultado posterior relevante, verifica se os grupos diferenciam algo útil.
+
+Ainda sobra subjetividade. Agrupar por comportamento, risco ou necessidade gera respostas diferentes sobre as mesmas pessoas. A escolha de features e escala já define o que significa parecer. K-means apenas executa essa definição com consistência.
+
+<Deep>
+O objetivo é minimizar a inércia
+
+$$
+J = \sum_{i=1}^{n}\lVert x_i-\mu_{z_i}\rVert_2^2
+$$
+
+onde $z_i$ indica o grupo de $x_i$ e $\mu_{z_i}$ é seu centro. Com centros fixos, escolher o mais próximo minimiza cada termo. Com atribuições fixas, a média minimiza a soma quadrática do grupo. A alternância garante queda monotônica de $J$, mas não o mínimo global.
+
+K-means pode ser visto como limite de uma mistura de gaussianas com covariâncias isotrópicas iguais e atribuições rígidas. O algoritmo EM da mistura mantém probabilidades de pertencimento e também estima parâmetros de dispersão. Essa leitura deixa explícita a hipótese esférica escondida.
+
+Por iteração, calcular distâncias custa proporcionalmente ao número de pontos, centros e dimensões. A memória pode ser controlada sem guardar toda a matriz de distâncias. Para datasets grandes, mini-batch k-means atualiza centros com pequenas amostras. Ele reduz custo e aceita mais ruído no resultado.
+
+Features precisam ser escaladas e, muitas vezes, transformadas. A média é sensível a outliers. Valores ausentes e categorias exigem tratamento anterior; transformar categorias arbitrárias em números cria distâncias falsas. Se o espaço original não tem geometria coerente, a função objetivo também não tem.
+
+</Deep>
+
+<Callout type="warn">
+  Nomes como “cliente premium” ou “usuário desengajado” são interpretações posteriores. Primeiro
+  descreva o grupo com variáveis observadas e incerteza. Depois valide se o rótulo verbal não
+  exagera o que os dados permitem afirmar.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que duas execuções de k-means podem produzir grupos diferentes?',
+      options: [
+        'Porque os rótulos mudam durante o treino',
+        'Porque a inicialização pode levar a ótimos locais diferentes',
+        'Porque a inércia aumenta a cada passo',
+        'Porque k é escolhido automaticamente',
+      ],
+      answer: 1,
+      why: 'O objetivo não é convexo em centros e atribuições juntos. Sementes diferentes podem estabilizar em partições diferentes.',
+    },
+    {
+      q: 'Por que a menor inércia não escolhe o melhor k?',
+      options: [
+        'Porque a inércia sempre cresce com k',
+        'Porque a inércia ignora completamente as distâncias',
+        'Porque ela sempre cai quando se adicionam centros',
+        'Porque só funciona com rótulos',
+      ],
+      answer: 2,
+      why: 'Mais centros oferecem mais liberdade para aproximar pontos. O mínimo trivial ocorre quando há centros demais, sem produzir um agrupamento útil.',
+    },
+    {
+      q: 'Em qual cenário k-means tende a falhar?',
+      options: [
+        'Grupos esféricos bem separados',
+        'Features contínuas padronizadas',
+        'Grupos em forma de anel com densidades diferentes',
+        'Poucos centros e dados compactos',
+      ],
+      answer: 2,
+      why: 'Um único centro e distância euclidiana representam mal formas não esféricas e regiões com densidades muito diferentes.',
+    },
+  ]}
+/>

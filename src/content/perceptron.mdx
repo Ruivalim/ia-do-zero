@@ -1,20 +1,35 @@
 <TLDR>
-Um perceptron é um neurônio artificial: ele multiplica cada entrada por um peso, soma tudo, e responde **sim** ou **não** dependendo de a soma passar de um limite. Aprender, para ele, é ajustar esses pesos toda vez que erra.
+  Um perceptron é um neurônio artificial: ele multiplica cada entrada por um peso, soma tudo, e
+  responde **sim** ou **não** dependendo de a soma passar de um limite. Aprender, para ele, é
+  ajustar esses pesos toda vez que erra.
+
 </TLDR>
 
 <Analogy>
 Imagine decidir se sai de casa. Você pesa alguns fatores: está chovendo (peso bem negativo), tem amigo indo (peso positivo alto), você está cansado (peso negativo médio). Multiplica cada fator pela importância que dá a ele, soma, e se o total passar do seu limite pessoal, você vai.
 
 O perceptron é exatamente esse cálculo — com a diferença de que ele não escolhe a importância de cada fator: ele descobre os pesos errando e corrigindo.
+
 </Analogy>
 
 ## O cálculo, em três passos
 
-<Steps items={[
-  ["Multiplica", "Cada entrada x₁, x₂, … é multiplicada pelo seu peso w₁, w₂, …. Peso grande e positivo quer dizer 'isso empurra pro sim'."],
-  ["Soma", "Junta tudo e acrescenta um viés b, que é o limite pessoal deslocado. O viés permite dizer 'sim' mesmo com todas as entradas zeradas."],
-  ["Decide", "Se a soma for maior ou igual a zero, a saída é +1. Senão, −1. É um degrau, não tem meio termo."]
-]} />
+<Steps
+  items={[
+    [
+      'Multiplica',
+      "Cada entrada x₁, x₂, … é multiplicada pelo seu peso w₁, w₂, …. Peso grande e positivo quer dizer 'isso empurra pro sim'.",
+    ],
+    [
+      'Soma',
+      "Junta tudo e acrescenta um viés b, que é o limite pessoal deslocado. O viés permite dizer 'sim' mesmo com todas as entradas zeradas.",
+    ],
+    [
+      'Decide',
+      'Se a soma for maior ou igual a zero, a saída é +1. Senão, −1. É um degrau, não tem meio termo.',
+    ],
+  ]}
+/>
 
 Geometricamente isso significa uma coisa só: o perceptron traça **uma reta** (ou um plano, em mais dimensões) e diz que tudo de um lado é de uma classe, tudo do outro lado é da outra.
 
@@ -31,7 +46,10 @@ A regra de aprendizado do perceptron é chocante de tão simples. Para cada exem
 "Empurrar na direção do exemplo" quer dizer: se o ponto era +1 e você disse −1, aumente os pesos das entradas que estavam ativas nesse ponto. Da próxima vez a soma vai dar um pouco mais alta e você tem chance de acertar.
 
 <Callout type="ok" title="Uma garantia rara">
-Se os dados forem linearmente separáveis — se existir alguma reta que separe as duas classes — o perceptron **provadamente** encontra uma, em um número finito de correções. Rosenblatt provou isso em 1958. Poucos algoritmos de machine learning têm garantia tão forte.
+  Se os dados forem linearmente separáveis — se existir alguma reta que separe as duas classes — o
+  perceptron **provadamente** encontra uma, em um número finito de correções. Rosenblatt provou isso
+  em 1958. Poucos algoritmos de machine learning têm garantia tão forte.
+
 </Callout>
 
 ## E o XOR
@@ -57,51 +75,58 @@ $$
 
 onde $\eta$ é a learning rate e $y \in \{-1, +1\}$.
 
-Repare que a atualização é feita **apenas** nos erros. Isso é equivalente a fazer descida de gradiente na chamada perceptron loss, $\max(0, -y(\mathbf{w}\cdot\mathbf{x}+b))$, que vale zero para todo ponto já classificado corretamente. Por isso o perceptron para de se mexer assim que acerta tudo — e por isso ele não busca a *melhor* reta, só *uma* reta que funcione. Se você quiser a reta com a maior margem possível, o algoritmo é outro: SVM.
+Repare que a atualização é feita **apenas** nos erros. Isso é equivalente a fazer descida de gradiente na chamada perceptron loss, $\max(0, -y(\mathbf{w}\cdot\mathbf{x}+b))$, que vale zero para todo ponto já classificado corretamente. Por isso o perceptron para de se mexer assim que acerta tudo — e por isso ele não busca a _melhor_ reta, só _uma_ reta que funcione. Se você quiser a reta com a maior margem possível, o algoritmo é outro: SVM.
 
 Três detalhes que valem lembrar:
 
 - **A learning rate não muda o resultado final** num perceptron sem viés inicial: multiplicar $\eta$ por uma constante só reescala $\mathbf{w}$, e o sinal de $\mathbf{w}\cdot\mathbf{x}$ não muda. Ela afeta a trajetória, não o destino. Em redes com ativação suave isso deixa de valer.
 - **O número de correções é limitado** por $(R/\gamma)^2$, onde $R$ é o raio dos dados e $\gamma$ é a margem da melhor separação. Margem apertada = muitas correções.
 - **A função degrau não é derivável**, o que impede empilhar perceptrons e treinar com gradiente. Trocá-la por uma <Ref to="funcoes-de-ativacao">ativação suave</Ref> é o que destrava o deep learning.
+
 </Deep>
 
 <Callout type="trap">
-"Perceptron" e "neurônio de uma rede neural moderna" não são a mesma coisa. O perceptron original usa degrau e a regra de correção acima. Um neurônio de MLP usa ReLU ou similar e é treinado por gradiente vindo do backprop. A estrutura *multiplica-soma-ativa* é a mesma; o método de aprendizado, não.
+  "Perceptron" e "neurônio de uma rede neural moderna" não são a mesma coisa. O perceptron original
+  usa degrau e a regra de correção acima. Um neurônio de MLP usa ReLU ou similar e é treinado por
+  gradiente vindo do backprop. A estrutura *multiplica-soma-ativa* é a mesma; o método de
+  aprendizado, não.
+
 </Callout>
 
-<Quiz questions={[
-  {
-    q: "Por que um perceptron não consegue resolver o XOR?",
-    options: [
-      "Porque falta learning rate suficiente",
-      "Porque não existe uma reta que separe as duas classes do XOR",
-      "Porque o XOR tem exemplos demais",
-      "Porque o viés está no valor errado"
-    ],
-    answer: 1,
-    why: "É uma limitação geométrica, não de treino. O perceptron só sabe desenhar uma fronteira reta, e o XOR exige uma fronteira que não é reta. Nenhum ajuste de hiperparâmetro resolve — só mudar o modelo."
-  },
-  {
-    q: "Quando o perceptron atualiza os pesos?",
-    options: [
-      "A cada exemplo, sempre",
-      "Só quando classifica um exemplo errado",
-      "Uma vez ao fim de cada época",
-      "Quando a perda passa de um limite"
-    ],
-    answer: 1,
-    why: "Acertou, não mexe. Isso vem direto da perceptron loss, que é zero para qualquer ponto já do lado certo da reta — gradiente zero, atualização zero."
-  },
-  {
-    q: "O que o viés (b) permite que o modelo faça?",
-    options: [
-      "Deslocar a fronteira para longe da origem",
-      "Deixar a fronteira curva",
-      "Acelerar o treino",
-      "Reduzir overfitting"
-    ],
-    answer: 0,
-    why: "Sem o viés, a reta é obrigada a passar pela origem. Com ele, ela pode ficar em qualquer lugar do plano — mas continua sendo uma reta."
-  }
-]} />
+<Quiz
+  questions={[
+    {
+      q: 'Por que um perceptron não consegue resolver o XOR?',
+      options: [
+        'Porque falta learning rate suficiente',
+        'Porque não existe uma reta que separe as duas classes do XOR',
+        'Porque o XOR tem exemplos demais',
+        'Porque o viés está no valor errado',
+      ],
+      answer: 1,
+      why: 'É uma limitação geométrica, não de treino. O perceptron só sabe desenhar uma fronteira reta, e o XOR exige uma fronteira que não é reta. Nenhum ajuste de hiperparâmetro resolve — só mudar o modelo.',
+    },
+    {
+      q: 'Quando o perceptron atualiza os pesos?',
+      options: [
+        'A cada exemplo, sempre',
+        'Só quando classifica um exemplo errado',
+        'Uma vez ao fim de cada época',
+        'Quando a perda passa de um limite',
+      ],
+      answer: 1,
+      why: 'Acertou, não mexe. Isso vem direto da perceptron loss, que é zero para qualquer ponto já do lado certo da reta — gradiente zero, atualização zero.',
+    },
+    {
+      q: 'O que o viés (b) permite que o modelo faça?',
+      options: [
+        'Deslocar a fronteira para longe da origem',
+        'Deixar a fronteira curva',
+        'Acelerar o treino',
+        'Reduzir overfitting',
+      ],
+      answer: 0,
+      why: 'Sem o viés, a reta é obrigada a passar pela origem. Com ele, ela pode ficar em qualquer lugar do plano — mas continua sendo uma reta.',
+    },
+  ]}
+/>

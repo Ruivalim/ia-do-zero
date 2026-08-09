@@ -1,0 +1,114 @@
+<TLDR>
+  O modelo é um **espelho estatístico** do dado e do processo que o gerou. Ele não "tem preconceito"
+  no sentido moral; ele reproduz e amplifica correlações — inclusive as que você não queria medir.
+
+</TLDR>
+
+<Analogy>
+  É treinar um estagiário só com os dossiês que o escritório já arquivou. Se no passado crédito foi
+  negado de forma desigual, o estagiário aprende o padrão como se fosse a lei da natureza. Tirar a
+  foto da pessoa da pasta não resolve se o CEP, a escola e o sobrenome ainda contam a mesma
+  história.
+
+</Analogy>
+
+## Onde o viés entra
+
+<Term id="vies">Viés</Term> no sentido de sistemas de ML não é só "opinião do programador". Entra em
+várias portas:
+
+- **Amostragem** — quem está no dataset, quem falta, em que proporção.
+- **Rotulagem** — o que conta como positivo; anotações inconsistentes ou enviesadas.
+- **Features** — o que você escolhe medir; o que vira proxy de atributo sensível.
+- **Métrica** — otimizar <Term id="acuracia">acurácia</Term> global pode sacrificar um subgrupo.
+- **Feedback** — o modelo influencia o mundo, o mundo vira dado novo, o laço fecha.
+
+Nenhum estágio é neutro por omissão. "Só deixei os dados falarem" já é uma escolha: a do status quo medido.
+
+<Demo id="bias" />
+
+## Acurácia global é uma máscara
+
+Padrão clássico: métrica agregada alta, desempenho péssimo numa fatia (região, gênero, idioma, tipo de cliente). A média esconde a carnificina — o mesmo aviso da <Ref to="avaliacao">avaliação</Ref> e de <Ref to="metricas">métricas</Ref>.
+
+Se você não mede por subgrupo, você não sabe. E se a empresa não coleta o atributo demográfico necessário para auditar, a cegueira é institucional, não técnica.
+
+## Definições de justiça colidem
+
+Três desejos comuns, em linguagem informal:
+
+- **Paridade demográfica** — taxa de decisão positiva igual entre grupos.
+- **Oportunidade igual** — mesma taxa de verdadeiro positivo entre grupos (quem "merecia" o sim).
+- **Calibração** — quando o modelo diz 70%, isso vale o mesmo em todo grupo.
+
+Em geral **não dá** para ter todas ao mesmo tempo, exceto em casos degenerados. Escolher qual perseguir — e em qual contexto legal e ético — é decisão de produto e de política, não um teorema que o time de ML "resolve" sozinho. O papel da engenharia é tornar o tradeoff **explícito** e mensurável, não escondê-lo atrás de uma única média.
+
+## Proxies: a coluna que você removeu ainda está lá
+
+Remover a variável sensível e declarar o modelo justo é o erro mais repetido do catálogo. CEP, nome, escola, histórico de navegação, tipo de dispositivo reconstroem informação correlacionada. O modelo não precisa da coluna proibida se o resto do vetor a implica.
+
+Tratar fairness como "não olhamos para X" confunde **cegueira de variável** com **equidade de resultado**. São coisas diferentes; a segunda exige medir resultados.
+
+## Loops que mordem o próprio rabo
+
+Em policiamento preditivo, crédito, moderação de conteúdo, recomendação: a decisão do modelo muda quem é parado, quem recebe oferta, o que é visto. O próximo dataset "confirma" o padrão. Viés deixa de ser foto estática e vira **dinâmica**.
+
+Interromper o laço exige desenho de sistema: exploração, tetos, revisão humana, dados de fora do pipeline viciado — não só retreinar no log de produção.
+
+<Deep>
+**Mínimo de higiene.** Métricas por subgrupo nas suites de eval; fatias estáveis ao longo do tempo; alertas quando uma fatia regrede. Sem isso, "melhoramos o modelo" pode significar "melhoramos para a maioria e pioramos para um canto".
+
+**Documentação.** Datasheets de dataset e model cards não são burocracia vazia se forem honestos: cobertura, limitações, usos desaconselhados, métricas de fatia. Servem para o time futuro e para quem audita.
+
+**Auditoria e dado demográfico.** Auditar disparidade muitas vezes exige atributos que a empresa evita coletar. Há tensão real com privacidade e com lei. Ignorar a tensão não a dissolve: ou você coleta com base legal e proteção forte, ou aceita que certas disparidades ficam invisíveis — e documenta essa escolha.
+
+**Amplificação.** Modelos não só copiam: em geração e em ranking, caudas e estereótipos frequentes no treino podem aparecer com taxa maior que no mundo. Medir distribuição de saída, não só acerto pontual.
+
+**LLM e corpus.** O pré-treino engole texto humano com todos os preconceitos da web e da cultura dominante nos dados. Pós-treino mitiga alguns comportamentos; não "limpa" o mundo. Produto em cima de LLM herda o espelho — e ainda o do seu RAG se o corpus interno for enviesado.
+
+</Deep>
+
+<Callout type="trap">
+  Remover a coluna sensível e declarar vitória. Proxies reconstroem o atributo; a métrica global
+  continua sorrindo. Justiça mensurável começa em resultados e fatias, não em "não vimos o campo
+  proibido".
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que acurácia global alta pode ser enganosa?',
+      options: [
+        'Porque sempre é menor que o recall',
+        'Porque pode esconder desempenho péssimo em um subgrupo',
+        'Porque não usa GPU',
+        'Porque depende só do tokenizer',
+      ],
+      answer: 1,
+      why: 'Agregar soma acertos da maioria. Fatias pequenas ou difíceis somem na média — e são onde o dano se concentra.',
+    },
+    {
+      q: 'O que acontece se você só remove a variável sensível do treino?',
+      options: [
+        'O modelo fica garantidamente justo',
+        'Proxies correlacionados podem reconstruir a informação',
+        'O gradiente zera',
+        'O LoRA para de funcionar',
+      ],
+      answer: 1,
+      why: 'Cegueira de variável não é equidade de resultado. CEP, nome e afins carregam sinal correlacionado.',
+    },
+    {
+      q: 'Por que paridade demográfica, oportunidade igual e calibração são difíceis de exigir juntas?',
+      options: [
+        'Porque são a mesma métrica com nomes diferentes',
+        'Porque em geral são matematicamente incompatíveis fora de casos degenerados',
+        'Porque só funcionam em RLHF',
+        'Porque exigem quantização em 4 bits',
+      ],
+      answer: 1,
+      why: "São definições distintas de 'justo'. Escolher qual priorizar é decisão normativa; engenharia expõe o tradeoff.",
+    },
+  ]}
+/>

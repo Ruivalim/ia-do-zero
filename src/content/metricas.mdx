@@ -1,0 +1,118 @@
+<TLDR>
+  Métrica transforma erros diferentes em um número. A escolha correta depende da frequência das
+  classes e, sobretudo, de **quanto custa cada tipo de erro**.
+
+</TLDR>
+
+<Analogy>
+Um alarme de incêndio pode errar de dois modos: tocar sem fogo ou ficar quieto durante um incêndio. Contar apenas quantas vezes acertou mistura consequências muito diferentes.
+
+O limite para disparar deve considerar o custo da evacuação desnecessária e o custo de ignorar perigo. O sensor produz um sinal; a decisão pertence ao contexto.
+
+</Analogy>
+
+## A acurácia pode esconder o modelo
+
+Em um problema com positivos raros, responder “negativo” para tudo gera acurácia alta. Se apenas uma pequena fração dos casos é positiva, o modelo acerta a maioria sem detectar um único caso relevante. O número está correto e a conclusão está errada.
+
+A matriz de confusão preserva os quatro resultados: verdadeiro positivo, falso positivo, verdadeiro negativo e falso negativo. Todas as métricas comuns de classificação reorganizam essas contagens. Começar pela matriz evita discutir uma média sem saber quais erros ela esconde.
+
+<Demo id="confusion-matrix" />
+
+Precisão pergunta: entre os casos marcados como positivos, quantos eram positivos? Recall pergunta: entre todos os positivos reais, quantos foram encontrados? Aumentar o threshold tende a elevar precisão e reduzir recall. Diminuí-lo faz o inverso.
+
+## Threshold é decisão
+
+O classificador costuma produzir um score ou probabilidade, não uma resposta inevitável. O threshold converte esse valor em ação. O padrão de 0,5 não conhece custo de investigação, capacidade da equipe, gravidade de um caso perdido nem taxa base da população.
+
+Em triagem, talvez seja aceitável revisar mais falsos positivos para perder poucos casos. Em bloqueio automático, um falso positivo pode interromper uma atividade legítima, exigindo threshold mais conservador. O mesmo modelo pode operar em pontos diferentes conforme a ação.
+
+F1 combina precisão e recall por média harmônica. É útil quando se quer um resumo que penalize desequilíbrio entre as duas. Mas ignora verdadeiros negativos e presume importância simétrica de precisão e recall. Se os custos não são simétricos, F1 pode escolher um ponto ruim para o negócio.
+
+<Callout type="trap">
+  Comparar modelos por acurácia em classes desbalanceadas, ou publicar a métrica no threshold 0,5
+  sem justificativa, terceiriza uma decisão importante para um padrão arbitrário. Mostre a matriz de
+  confusão no ponto escolhido e declare o custo que orientou a escolha.
+
+</Callout>
+
+## Curvas sem um único threshold
+
+A curva ROC varia o threshold e coloca taxa de verdadeiros positivos contra taxa de falsos positivos. A AUC resume a capacidade de ordenar um positivo acima de um negativo. Ela é independente de um ponto operacional, o que facilita comparar ranking.
+
+Quando positivos são raros, uma taxa pequena de falsos positivos ainda pode gerar muitos alarmes. A curva precisão-recall expõe diretamente essa situação: mostra quanta pureza resta entre os alertas à medida que o recall cresce. Por isso costuma ser mais informativa em detecção rara.
+
+Nenhuma AUC decide o threshold. Ela mede ordenação agregada e pode esconder a região específica que interessa. Compare modelos na faixa operacional e avalie incerteza, não só a área inteira.
+
+## Métricas de regressão
+
+MAE calcula a magnitude média dos erros. Cada unidade adicional pesa igualmente, e o resultado permanece na unidade do alvo. RMSE tira a raiz da média dos erros quadráticos. Também volta à unidade original, mas erros grandes recebem influência maior.
+
+Escolher entre elas expressa uma preferência. Se desvios extremos custam muito mais, RMSE pode refletir esse risco. Se outliers são frequentes e não devem dominar, MAE é mais robusta. Sempre complemente a média com distribuição dos resíduos e recortes relevantes.
+
+<Deep>
+Com contagens $VP$, $FP$, $VN$ e $FN$:
+
+$$
+\text{precisão}=\frac{VP}{VP+FP},\qquad
+\text{recall}=\frac{VP}{VP+FN}
+$$
+
+Uma matriz de custo torna a decisão explícita. Para cada threshold, estime
+
+$$
+C = c_{FP}\,FP + c_{FN}\,FN
+$$
+
+e inclua custos de revisão, atraso ou capacidade quando forem relevantes. Os valores não precisam fingir precisão perfeita; cenários de custo já mostram se a decisão é robusta.
+
+Calibração faz outra pergunta: entre previsões próximas de uma probabilidade declarada, a frequência observada corresponde a ela? Um modelo pode ter ótima AUC, ordenar todos os casos corretamente e ainda produzir probabilidades excessivamente confiantes. Platt scaling ajusta uma transformação sigmoide em validação; regressão isotônica aprende uma transformação monotônica mais flexível. Ambas exigem dados separados do treino do modelo base.
+
+Métricas agregadas também escondem subgrupos. Calcular recall, falsos positivos e calibração por população conecta avaliação a <Ref to="vies-e-dados">viés</Ref>. Diferenças podem refletir prevalência, qualidade de rótulo ou cobertura, e precisam de investigação. Uma média justa não garante desempenho aceitável para cada grupo.
+
+</Deep>
+
+<Callout type="info">
+  Uma boa avaliação contém pelo menos: distribuição das classes, matriz no threshold escolhido,
+  curva relevante, incerteza e resultado por subgrupo. Um único placar facilita ranking e dificulta
+  entendimento.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que acurácia pode enganar quando positivos são raros?',
+      options: [
+        'Porque não conta verdadeiros negativos',
+        'Porque prever sempre a classe majoritária pode parecer excelente sem encontrar positivos',
+        'Porque exige probabilidades calibradas',
+        'Porque sempre é menor que F1',
+      ],
+      answer: 1,
+      why: 'A maioria dos exemplos domina a média. O modelo pode acertá-la quase sempre e falhar justamente na classe que motivou o sistema.',
+    },
+    {
+      q: 'Quem deve determinar o threshold de decisão?',
+      options: [
+        'A biblioteca, mantendo sempre 0,5',
+        'O custo relativo dos erros e a capacidade operacional',
+        'A feature com maior importância',
+        'O conjunto de treino sozinho',
+      ],
+      answer: 1,
+      why: 'O score vem do modelo; converter score em ação depende do preço de falsos positivos e falsos negativos no contexto real.',
+    },
+    {
+      q: 'Um modelo pode ter boa AUC e calibração ruim?',
+      options: [
+        'Não, são a mesma propriedade',
+        'Sim, pode ordenar bem e atribuir probabilidades que não correspondem às frequências reais',
+        'Só em regressão',
+        'Apenas quando a acurácia é zero',
+      ],
+      answer: 1,
+      why: 'AUC mede ranking entre classes. Calibração mede se a escala probabilística corresponde ao que acontece. Uma não garante a outra.',
+    },
+  ]}
+/>

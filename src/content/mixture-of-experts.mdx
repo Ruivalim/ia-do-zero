@@ -1,0 +1,126 @@
+<TLDR>
+  Mixture-of-Experts troca a MLP densa de cada bloco por **N especialistas e um roteador**. Só os
+  top-k experts rodam por token: capacidade total sobe sem o custo de ativar tudo a cada passo.
+
+</TLDR>
+
+<Analogy>
+Um hospital com dezenas de especialistas e uma recepção. Cada paciente (token) não passa por todos os consultórios. A recepção olha o caso e manda para os dois ou três mais adequados.
+
+O prédio ainda tem todos os consultórios montados, com equipamento e equipe — isso custa espaço e folha. Mas o tempo de atendimento de um paciente só paga o trabalho dos consultórios que ele de fato visitou. Capacidade instalada grande; custo por visita menor que mandar todo mundo para todos.
+
+</Analogy>
+
+## O que muda no bloco
+
+No <Ref to="transformer">Transformer</Ref> denso, depois da attention cada token passa pela **mesma** MLP. Essa MLP concentra a maior parte dos parâmetros do bloco — na ordem de dois terços em arquiteturas típicas.
+
+MoE substitui essa MLP única por um conjunto de MLPs (_experts_) e um **roteador** aprendido:
+
+<Steps
+  items={[
+    ['Roteador', 'Olha o vetor do token e produz um escore por expert.'],
+    [
+      'Top-k',
+      'Só os k experts com maior escore processam aquele token (k pequeno, em geral 1 ou 2).',
+    ],
+    [
+      'Combinação',
+      'As saídas dos experts escolhidos se misturam, ponderadas pelos pesos do roteador.',
+    ],
+    [
+      'Attention intacta',
+      'A troca de informação entre tokens continua densa; a esparsidade mora na MLP.',
+    ],
+  ]}
+/>
+
+Parâmetros **totais** contam todos os experts. Parâmetros **ativos** por token são só os top-k mais o resto do bloco (attention, normas, embeddings). Daí o slogan: modelo com capacidade de gigante e FLOPs por token de modelo médio.
+
+<Demo id="moe-router" />
+
+No demo, cada token acende poucos experts. Mude a sequência e o padrão de carga muda — e o histograma mostra se o tráfego se concentra em poucos especialistas ou se espalha.
+
+## O ganho e o que não some
+
+**Ganho.** Mais parâmetros sem multiplicar o compute na mesma proporção. Para um orçamento fixo de FLOPs de treino ou de latência de inferência, dá para carregar mais "conhecimento" em experts que quase não se ativam juntos.
+
+**O que não some: memória.** Na inferência séria, os pesos dos experts precisam estar disponíveis — em GPU, em CPU com offload, ou espalhados em várias máquinas. Você não paga o multiply-add de todos a cada token, mas paga espaço e largura de banda para tê-los à mão. Servir MoE em hardware local apertado dói exatamente aqui: o modelo "cabe em FLOPs" e não cabe em VRAM.
+
+## Balanceamento e colapso
+
+Se o roteador descobrir dois experts "bons o suficiente", pode mandar quase tudo para eles. Os outros morrem de inanição: nunca treinam de verdade, viram peso morto.
+
+Por isso existe **perda auxiliar de balanceamento**: um termo que pune desvio entre a fração de tokens que cada expert recebe e a fração ideal. O treino empurra uso mais uniforme sem destruir a especialização útil.
+
+Mesmo assim, colapso parcial e experts semi-mortos aparecem na prática. Monitorar histograma de roteamento não é vaidade — é higiene de treino.
+
+<Callout type="trap" title="Trilhão MoE não é trilhão denso">
+Comparar "um modelo de trilhão de parâmetros" MoE com um denso do mesmo número como se fossem equivalentes é erro de unidade. No denso, quase todos os parâmetros participam de cada token. No MoE, a maior parte fica desligada por token.
+
+O cartão de visita de parâmetros totais deixa de ser comparável entre arquiteturas. O que importa para custo de um forward é parâmetros ativos (e memória residente). O que importa para capacidade bruta de armazenamento de padrões é mais sutil — e não se resume a um único número de marketing.
+
+</Callout>
+
+## Servir é outra engenharia
+
+No treino em cluster, experts se distribuem entre GPUs. Cada token precisa ir até o device do expert escolhido (ou o expert até o token). Isso é **comunicação all-to-all**: latência e largura de banda de rede viram parte do custo real, não só a aritmética.
+
+Na inferência:
+
+- Roteamento dinâmico quebra o batch homogêneo: tokens do mesmo prompt podem ir a experts diferentes.
+- Capacity limits em cada expert forçam filas ou descarte quando um expert satura.
+- Quantização e <Ref to="quantizacao">offload</Ref> ajudam a memória, mas o padrão de acesso fica irregular — pior para caches e kernels otimizados para denso.
+
+MoE brilha quando há orçamento de treino e frota de GPUs preparada para o caos do roteamento. Em laptop ou numa única GPU consumidora, o denso menor costuma ser a escolha menos dramática.
+
+<Deep>
+**Top-k e não diferenciabilidade.** Escolher os k maiores escores é uma operação discreta: o gradiente não flui para os experts que ficaram de fora pela via do "quase entrei". O que flui é o caminho pelos experts selecionados e, via softmax (ou sparsified gating) sobre os escores, um sinal para o roteador. Variantes usam ruído no gate no treino, top-1 com técnicas de estabilização, ou experts compartilhados sempre ativos para suavizar.
+
+**Capacity factor.** Cada expert tem um teto de tokens por passo: capacidade ≈ (tokens no batch / N) × capacity factor. Acima disso, tokens excedentes são descartados (ou desviados) naquele expert. Factor baixo economiza compute e memória de buffer, mas joga fora sinal; factor alto reduz descarte e encarece o pior caso. É um hiperparâmetro de engenharia, não de teoria elegante.
+
+**Por que a MLP é o alvo natural.** Attention mistura tokens e já é cara em $n^2$; torná-la esparsa é outro projeto (attention local, linear, etc.). A MLP é token-a-token, embaraçosamente paralela, e concentra a maior fatia de parâmetros. Trocar só ela por experts maximiza parâmetros totais com mudança localizada no bloco.
+
+**Granularidade fina.** Em vez de poucos experts gigantes, muitos experts menores (fine-grained) com top-k maior em contagem mas custo similar dão roteamento mais suave e melhor utilização em alguns regimes. O espaço de desenho — tamanho do expert, k, experts compartilhados, hierarquia de roteadores — é grande e ainda empírico.
+
+**Treino vs inferência local.** No treino distribuído, o custo de comunicação se amortiza em batches enormes e o ganho de qualidade por FLOP ativo justifica a complexidade. Na inferência local, batch=1, latência de kernel e footprint de memória dominam: carregar dezenas de experts para ativar dois por token é o anti-padrão de cache. Por isso MoE "na nuvem" e MoE "no notebook" são produtos diferentes com o mesmo paper de origem.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que o roteador de um MoE decide por token?',
+      options: [
+        'Qual camada de attention pular',
+        'Quais top-k experts da MLP processam aquele token',
+        'O tamanho do vocabulário',
+        'A temperature de amostragem',
+      ],
+      answer: 1,
+      why: 'A esparsidade fica na MLP: o roteador escolhe poucos experts; attention entre tokens continua no caminho denso do bloco.',
+    },
+    {
+      q: 'Por que parâmetros totais e parâmetros ativos divergem em MoE?',
+      options: [
+        'Porque embeddings não contam',
+        'Porque só os experts escolhidos (top-k) participam do forward de cada token, embora todos existam na memória',
+        'Porque MoE não tem attention',
+        'Porque o otimizador descarta pesos',
+      ],
+      answer: 1,
+      why: 'Capacidade instalada ≠ compute por token. Marketing cita totais; custo de um passo depende dos ativos — e a VRAM ainda sente os totais.',
+    },
+    {
+      q: 'Qual custo o MoE não elimina ao aumentar o número de experts?',
+      options: [
+        'A necessidade de ter os pesos dos experts disponíveis em memória (e a complexidade de roteá-los entre dispositivos)',
+        'Todo e qualquer FLOP de treino',
+        'O uso de LayerNorm',
+        'A tokenização',
+      ],
+      answer: 0,
+      why: 'FLOPs por token caem em relação a um denso com o mesmo total de parâmetros; memória residente e comunicação de roteamento permanecem — e doem em servir e em inferência local.',
+    },
+  ]}
+/>

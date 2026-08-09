@@ -1,0 +1,128 @@
+<TLDR>
+  Um LLM nasce em duas fases bem diferentes. O **pré-treino** lê um oceano de texto e aprende como a
+  linguagem e o mundo funcionam. O **pós-treino** ensina a se comportar: seguir instrução, escolher
+  o tom, recusar o que deve recusar. Conhecimento vem da primeira; utilidade, da segunda.
+
+</TLDR>
+
+<Analogy>
+Alguém que passou vinte anos lendo tudo que existe numa biblioteca gigantesca, sem nunca conversar com ninguém. Sabe uma quantidade absurda de coisas e não faz ideia de como se portar: se você começar uma frase, ele continua o texto — porque foi isso que ele passou a vida fazendo.
+
+Depois vêm alguns meses de treinamento social: como responder a uma pergunta em vez de continuá-la, quando dizer que não sabe, como não ser grosseiro, o que não ajudar a fazer.
+
+O segundo treinamento não acrescentou quase nada ao que a pessoa sabe. Mudou o que ela faz com isso.
+
+</Analogy>
+
+## Pré-treino: caro, longo, uma vez
+
+A tarefa é a mais simples possível: dado o texto até aqui, prever o <Ref to="proximo-token">próximo token</Ref>. O rótulo vem do próprio texto, então não há custo de anotação — dá para treinar em trilhões de tokens.
+
+É contraintuitivo que uma tarefa tão boba produza tanta capacidade. A explicação usual: para prever bem a próxima palavra em textos arbitrários, o modelo é _obrigado_ a modelar sintaxe, fatos, estilo, raciocínio e boa parte da estrutura do mundo. Prever o final de "o resultado da soma de 47 com 58 é" exige saber somar.
+
+Custos e escala:
+
+- Meses de treino em milhares de GPUs, com custo na casa das dezenas de milhões de dólares para modelos de fronteira.
+- Boa parte do esforço vai em **curadoria de dados**: deduplicar, filtrar lixo, balancear idiomas e domínios, remover conteúdo tóxico e dados pessoais. Qualidade do corpus move a agulha tanto quanto tamanho.
+- O resultado é o **modelo base**. Ele completa texto e é péssimo como assistente: pergunte algo e ele pode responder com mais três perguntas parecidas, porque isso é o que apareceria numa lista de FAQ.
+
+## Pós-treino: barato, rápido, contínuo
+
+Aqui o modelo aprende a ser útil. Três etapas típicas:
+
+<Steps
+  items={[
+    [
+      'SFT — fine-tuning supervisionado',
+      'Milhares a centenas de milhares de conversas exemplares escritas ou revisadas por humanos. Ensina o formato de diálogo: pergunta entra, resposta sai.',
+    ],
+    [
+      'Modelagem de preferência',
+      'Humanos comparam pares de respostas e dizem qual é melhor. Isso vira sinal de treino via RLHF ou DPO — o assunto de outra página.',
+    ],
+    [
+      'Ajustes finos e específicos',
+      'Uso de ferramentas, formatos estruturados, políticas de segurança, comportamento de raciocínio. Cada laboratório tem sua receita.',
+    ],
+  ]}
+/>
+
+Comparado ao pré-treino, é ordens de grandeza mais barato. É por isso que modelos recebem versões novas com frequência sem que ninguém treine tudo de novo: quase sempre o que mudou foi o pós-treino.
+
+<Versus
+  left="Pré-treino"
+  right="Pós-treino"
+  rows={[
+    ['Objetivo', 'Prever o próximo token em texto cru', 'Produzir a resposta que humanos preferem'],
+    ['Dado', 'Trilhões de tokens da web, livros, código', 'Milhares a milhões de exemplos curados'],
+    ['Custo', 'Dezenas de milhões de dólares, meses', 'Ordens de grandeza menor'],
+    ['O que muda', 'Conhecimento e capacidade bruta', 'Comportamento, formato, tom, recusa'],
+    ['Frequência', 'Raro, uma vez por geração de modelo', 'Contínuo, várias versões por ano'],
+  ]}
+/>
+
+<Callout type="trap">
+"Vamos fazer pós-treino para o modelo aprender os documentos da nossa empresa" é o erro mais caro e mais comum. Pós-treino ensina **comportamento**, não fatos — e injetar conhecimento por fine-tuning é pouco confiável: o modelo mistura, esquece o que sabia antes e continua alucinando nas lacunas.
+
+Para conhecimento específico e atualizável, a resposta quase sempre é <Ref to="rag">RAG</Ref>. Veja também <Ref to="fine-tuning-e-lora">fine-tuning e LoRA</Ref>, onde essa decisão é destrinchada.
+
+</Callout>
+
+## O corte de conhecimento
+
+O modelo sabe o mundo até a data em que o corpus de pré-treino foi congelado. Depois disso, nada. Ele não aprende com as suas conversas, não navega sozinho, não se atualiza.
+
+Quando um assistente responde sobre eventos recentes, é porque alguém colocou essa informação no <Ref to="janela-de-contexto">contexto</Ref> — via busca, via ferramenta, via documento anexado. A capacidade veio do pré-treino; a informação veio de fora, agora.
+
+<Deep>
+**Cronograma ótimo de dados.** As <Ref to="leis-de-escala">leis de escala</Ref> revisadas indicam que, para um orçamento fixo de compute, existe uma proporção aproximadamente ótima entre parâmetros e tokens de treino — em torno de vinte tokens por parâmetro na formulação mais conhecida. Modelos anteriores a essa descoberta eram grandes e subtreinados. Como o custo de servir depende do tamanho e não dos tokens vistos, na prática treina-se bem além do ótimo teórico: um modelo menor treinado por mais tempo é mais barato de servir para sempre.
+
+**Currículo e mistura.** A proporção entre código, texto científico, web geral e idiomas não é acidental. Código no corpus melhora raciocínio estruturado mesmo em tarefas que não são de programação. Fases finais de pré-treino costumam elevar a proporção de dados de alta qualidade — uma espécie de currículo.
+
+**Contaminação.** Se o benchmark que você usa para avaliar vazou para o corpus de pré-treino, a nota mede memorização. Detectar contaminação é difícil e o problema é generalizado em avaliações públicas. É um bom motivo para ter <Ref to="avaliacao">evals próprias</Ref>.
+
+**Esquecimento catastrófico.** Pós-treino agressivo num domínio estreito degrada capacidades gerais. Mitigações incluem misturar dados gerais no ajuste, usar learning rate baixa e adaptadores em vez de treinar tudo.
+
+**Modelo base ainda existe.** Alguns laboratórios publicam o base junto com o modelo ajustado. Ele é melhor para tarefas de continuação pura e para pesquisa, e é a peça de que se parte para pós-treino próprio.
+
+**Distilação.** Um modelo grande gera dados de treino para um pequeno. É uma forma barata de transferir comportamento, muito usada nos modelos pequenos que rodam local — e uma fonte constante de disputa sobre termos de uso.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual das fases dá ao modelo o conhecimento factual que ele tem?',
+      options: [
+        'O pós-treino, com dados curados',
+        'O pré-treino, prevendo o próximo token em um corpus enorme',
+        'O RLHF',
+        'O fine-tuning do cliente',
+      ],
+      answer: 1,
+      why: 'Conhecimento vem da fase cara e longa de prever o próximo token em trilhões de tokens. O pós-treino ajusta comportamento — formato, tom, recusa — e acrescenta pouquíssimo conhecimento novo.',
+    },
+    {
+      q: 'Por que um modelo base é ruim como assistente mesmo sabendo muito?',
+      options: [
+        'Porque tem poucos parâmetros',
+        'Porque foi treinado para continuar texto, não para responder perguntas',
+        'Porque a temperature vem alta de fábrica',
+        'Porque não tem janela de contexto',
+      ],
+      answer: 1,
+      why: 'A tarefa de pré-treino é continuação. Diante de uma pergunta, o modelo base pode continuar com mais perguntas parecidas, porque é o que apareceria naquele tipo de texto. O formato de diálogo é ensinado depois.',
+    },
+    {
+      q: 'Uma empresa quer que o modelo conheça seus 10 mil documentos internos. Qual o caminho mais provável de dar certo?',
+      options: [
+        'Fine-tuning com os documentos',
+        'RAG: indexar os documentos e recuperar os trechos relevantes no contexto',
+        'Pré-treino contínuo',
+        'Aumentar a janela de contexto e colar tudo',
+      ],
+      answer: 1,
+      why: 'Fine-tuning ensina comportamento, não fatos confiáveis, e o conhecimento fica congelado no momento do treino. RAG mantém os documentos atualizáveis, permite citar a fonte e custa uma fração.',
+    },
+  ]}
+/>

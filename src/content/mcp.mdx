@@ -1,0 +1,115 @@
+<TLDR>
+  MCP (Model Context Protocol) é um **padrão de plugue**: ferramentas, recursos e prompts
+  reutilizáveis expostos de um jeito que qualquer cliente compatível entende. Em vez de N clientes ×
+  M integrações, você escreve a capacidade uma vez.
+
+</TLDR>
+
+<Analogy>
+  Antes do USB, cada periférico tinha conector próprio — e cada fabricante de computador reinventava
+  o cabo. MCP é a tentativa de USB para "o que um modelo pode usar": um servidor expõe capacidades;
+  o cliente (chat, IDE, agente) descobre e chama sem integração sob medida para cada par.
+
+</Analogy>
+
+## O problema N×M
+
+Você tem vários clientes (assistente interno, IDE, bot de suporte) e várias fontes de capacidade (CRM, Git, calendário, busca). Sem protocolo comum, cada cliente implementa cada ferramenta: explosão N×M de conectores frágeis.
+
+Com um protocolo compartilhado, cada cliente fala MCP e cada servidor expõe MCP: a conta vira **N+M**. A ferramenta escrita uma vez aparece em qualquer cliente compatível.
+
+Isso não é magia de modelo. É **contrato de engenharia** em volta de <Ref to="agentes">tool use</Ref>.
+
+<Demo id="mcp-wiring" />
+
+## O que o protocolo padroniza
+
+Em linhas gerais, um servidor <Term id="mcp">MCP</Term> pode oferecer:
+
+- **Ferramentas** — ações com parâmetros (o análogo da tool call): buscar issue, criar evento, rodar consulta.
+- **Recursos** — dados legíveis por URI (um arquivo, um registro, um documento), sem necessariamente "ação".
+- **Prompts** — templates reutilizáveis que o cliente pode oferecer ao usuário ou ao modelo.
+
+Há ainda descoberta: o cliente pergunta o que existe; o servidor lista nomes, descrições e schemas. A chamada de ferramenta carrega argumentos tipados; a resposta volta estruturada.
+
+Transporte comum: **stdio** (processo local, um servidor por subprocesso) e **HTTP** (remoto, compartilhado). Local é simples para dev e para segredos na máquina do usuário. Remoto escala para times e serviços centrais — com toda a superfície de rede que isso implica.
+
+## Servidor é processo comum
+
+Servidor MCP não precisa ser "IA". É um programa em qualquer linguagem que implementa o contrato: autentica (se remoto), expõe capacidades, executa com o escopo que **você** definiu, devolve resultado.
+
+O cliente (onde o <Term id="llm">LLM</Term> vive) traduz as ferramentas descobertas para o formato de tool use do modelo, orquestra o loop, e mostra recursos/prompts na UI quando fizer sentido.
+
+## Ganho prático — e o preço
+
+**Ganho:** uma integração de "ler o tracker de issues" serve no chat da empresa e no editor. Menos código colado, menos drift entre clientes.
+
+**Preço:** cada servidor conectado despeja descrições no contexto. Muitos servidores = catálogo enorme = o modelo se confunde e o prompt engorda. Curadoria do que está **ligado** por sessão importa tanto quanto escrever o servidor.
+
+MCP não decide **se** você deveria expor uma capacidade a um modelo. Só padroniza o _como_. A pergunta de produto continua: essa ação precisa de humano? O resultado cabe no contexto? A identidade do chamador está clara? Protocolo comum sem política de acesso é só um jeito elegante de espalhar o mesmo erro em vários clientes.
+
+<Callout type="info" title="Recurso ≠ ferramenta">
+  Ler um documento (recurso) e "criar ticket" (ferramenta) são verbos diferentes de permissão e de
+  auditoria. O protocolo separa de propósito: um é dado, o outro é efeito colateral. Não misture os
+  dois no desenho só porque "o modelo lê texto nos dois casos".
+
+</Callout>
+
+<Deep>
+**JSON Schema na ferramenta.** Parâmetros seguem schema: tipos, required, enums. Isso é o mesmo tipo de contrato de <Ref to="agentes">agentes</Ref> bem feitos — MCP só padroniza o envelope e a descoberta.
+
+**Versionamento.** Clientes e servidores evoluem. Campos novos, ferramentas renomeadas, schemas mais rígidos quebram quem não versiona. Trate o servidor como API pública: mudanças compatíveis, depreciação explícita.
+
+**stdio vs HTTP.** stdio: lifecycle amarrado ao cliente, bom para filesystem local e credenciais do usuário. HTTP: auth, multi-tenant, rate limit, observabilidade central — e a obrigação de não confiar no cliente.
+
+**Contexto.** Descrições longas de dezenas de ferramentas competem com a conversa na <Term id="contexto">janela</Term>. Servidores devem expor descrições curtas e lazy-loading quando o ecossistema permitir; clientes devem deixar o usuário (ou a política) escolher o subconjunto ativo.
+
+**Segurança.** A descrição da ferramenta entra no prompt. Se a descrição ou o resultado vêm de terceiro não confiável, há superfície de injeção. O servidor é o limite de confiança: escopo, authz, audit log.
+
+</Deep>
+
+<Callout type="trap">
+  Expor um servidor MCP com acesso amplo ao banco ou ao shell e assumir que "o cliente vai
+  policiar". Confiança, escopo e auditoria são responsabilidade do **servidor** (e da identidade de
+  quem chama). Ferramenta cuja descrição ou dados vêm de terceiro é superfície de injeção — trate
+  como input não confiável.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual problema principal o MCP ataca?',
+      options: [
+        'Reduzir o número de parâmetros do modelo',
+        'Evitar a explosão de integrações N clientes × M ferramentas com um protocolo comum',
+        'Eliminar alucinação',
+        'Substituir fine-tuning',
+      ],
+      answer: 1,
+      why: 'É um padrão de interoperabilidade. Capacidades escritas uma vez, consumidas por qualquer cliente compatível.',
+    },
+    {
+      q: 'Quem deve enforçar permissão de uma ferramenta perigosa?',
+      options: [
+        'Só o prompt do sistema no cliente',
+        'O servidor (e a identidade autenticada), com escopo mínimo',
+        'O tokenizador',
+        'O rank do LoRA',
+      ],
+      answer: 1,
+      why: 'Cliente pode ser comprometido ou mal configurado. Authz e efeito colateral ficam no lado que executa de verdade.',
+    },
+    {
+      q: 'Por que conectar dezenas de servidores MCP de uma vez pode piorar o agente?',
+      options: [
+        'Porque o HTTP não suporta isso',
+        'Porque o catálogo de ferramentas engorda o contexto e confunde a escolha do modelo',
+        'Porque o stdio aceita no máximo um servidor',
+        'Porque embeddings param de funcionar',
+      ],
+      answer: 1,
+      why: 'Cada descrição compete por atenção e tokens. Menos ferramentas ativas e bem nomeadas costumam render mais.',
+    },
+  ]}
+/>

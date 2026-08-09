@@ -1,0 +1,126 @@
+<TLDR>
+  Aprender, para um modelo, é um ciclo de três passos repetido milhões de vezes: **chuta**, **mede o
+  quanto errou**, **ajusta um pouquinho na direção que diminui o erro**. Não há mais nada além
+  disso.
+
+</TLDR>
+
+<Analogy>
+Você está ajustando o chuveiro no escuro. Gira um pouco, sente a água: fria demais. Gira mais. Quente demais — passou. Volta menos da metade. Em umas seis tentativas você chega na temperatura boa.
+
+Repare no que você fez sem pensar: usou o **sinal** do erro (fria = girar para cá) e o **tamanho** do erro (muito fria = girar bastante). É exatamente o algoritmo. A única diferença é que o modelo faz isso com milhões de torneiras ao mesmo tempo.
+
+</Analogy>
+
+<Demo id="guess-and-correct" />
+
+## O ciclo, com os nomes de verdade
+
+<Steps
+  items={[
+    [
+      'Previsão',
+      'O modelo, com os parâmetros que tem agora, produz uma saída para um exemplo. No começo os parâmetros são aleatórios e a saída é lixo — isso é esperado.',
+    ],
+    [
+      'Perda',
+      'Uma função compara a previsão com a resposta certa e devolve um número: quanto pior, maior. Esse número é a loss.',
+    ],
+    [
+      'Gradiente',
+      'Calcula-se, para cada parâmetro, se aumentá-lo faria a perda subir ou descer, e com que intensidade. Esse conjunto de derivadas é o gradiente.',
+    ],
+    [
+      'Atualização',
+      'Cada parâmetro anda um passo pequeno na direção contrária ao gradiente. O tamanho do passo é a learning rate.',
+    ],
+    ['Repete', 'Volta ao passo 1 com o próximo lote de exemplos. Milhares a milhões de vezes.'],
+  ]}
+/>
+
+É esse laço que roda tanto num modelo de duas variáveis quanto num LLM de centenas de bilhões de parâmetros. A escala muda; o laço, não.
+
+## A perda é a definição do que é "bom"
+
+Escolher a função de perda é escolher o que o modelo vai perseguir. Duas das mais comuns:
+
+- **Erro quadrático médio** (regressão): média de $(\text{previsto} - \text{real})^2$. Punir o quadrado significa que um erro de 10 dói cem vezes mais que um erro de 1 — o modelo fica obcecado com os casos extremos.
+- **Entropia cruzada** (classificação): pune ficar confiante e errado muito mais do que ficar em dúvida e errado.
+
+<Callout type="warn" title="A perda não é a métrica de negócio">
+O modelo minimiza a perda. Você se importa com outra coisa: receita, vidas salvas, chamadas evitadas. Quando as duas divergem, o modelo obedece à perda, sempre.
+
+Um detector de fraude treinado com perda simétrica trata "bloquear uma compra legítima" e "deixar passar uma fraude" como erros de mesmo tamanho. Para o negócio eles custam valores muito diferentes. Ou você embute isso na perda (pesos por classe), ou você conserta depois no <Ref to="metricas">threshold</Ref>.
+
+</Callout>
+
+## Por que passos pequenos
+
+Se o modelo corrigisse o erro inteiro de uma vez, cada exemplo apagaria o aprendizado do anterior. O último cliente da fila decidiria o modelo.
+
+Passos pequenos fazem o modelo acumular evidência: uma tendência que aparece em muitos exemplos empurra os parâmetros de forma consistente; ruído de um exemplo isolado é cancelado pelos próximos. É por isso que a <Term id="learning-rate">learning rate</Term> é o hiperparâmetro que mais dói errar — e o assunto de <Ref to="gradiente-descendente">gradiente descendente</Ref>.
+
+<Callout type="trap">
+  "O modelo aprendeu" não quer dizer que ele entendeu alguma coisa. Quer dizer que existe uma
+  configuração de números que produz a saída certa nos exemplos vistos. Se essa configuração captura
+  o padrão real ou apenas decorou as respostas é uma pergunta diferente — e é toda a discussão de{' '}
+  <Ref to="overfitting">overfitting</Ref>.
+
+</Callout>
+
+<Deep>
+Formalizando o laço: seja $\theta$ o vetor de parâmetros, $\mathcal{L}(\theta)$ a perda média no lote atual. O passo básico é
+
+$$
+\theta \leftarrow \theta - \eta \, \nabla_\theta \mathcal{L}(\theta)
+$$
+
+Três coisas que a fórmula esconde:
+
+**Nem sempre é o gradiente puro.** Otimizadores modernos guardam estado. Momentum acumula uma média das direções recentes e atravessa platôs; Adam mantém, por parâmetro, uma média do gradiente e uma do gradiente ao quadrado, e normaliza o passo por essa segunda — o que dá, na prática, uma learning rate adaptativa por parâmetro. O preço é memória: Adam guarda dois estados extras por parâmetro, o que triplica o custo de memória de treino. É por isso que <Ref to="fine-tuning-e-lora">LoRA</Ref> economiza tanto.
+
+**"Lote" é uma escolha.** Gradiente sobre o dataset inteiro é estável e caríssimo. Sobre um exemplo só é barato e ruidosíssimo. Mini-batch (32 a 4096, tipicamente) fica no meio, e o ruído do mini-batch é _útil_: ajuda a escapar de mínimos rasos.
+
+**Não há garantia de mínimo global.** A superfície de perda de uma rede profunda é não convexa, cheia de selas e vales. A descoberta empírica que fez o deep learning funcionar é que, em dimensão muito alta, a maioria dos pontos críticos são selas e não mínimos locais ruins — e os mínimos encontrados tendem a ser aproximadamente igual de bons. Isso não é um teorema; é uma observação que se sustentou na prática.
+
+Uma última: a perda que você otimiza pode ser um substituto (_surrogate_) da que você quer. Acurácia não é derivável, então treina-se com entropia cruzada e mede-se acurácia. Sempre que treino e avaliação usam funções diferentes, existe uma folga — e é nela que moram as surpresas.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que a função de perda faz?',
+      options: [
+        'Decide a arquitetura do modelo',
+        'Transforma o erro do modelo em um único número que pode ser minimizado',
+        'Remove exemplos ruins do treino',
+        'Escolhe a learning rate automaticamente',
+      ],
+      answer: 1,
+      why: "A perda comprime 'o quanto o modelo errou' em um número derivável. Sem isso não há direção para ajustar os parâmetros — e é por isso que a escolha da perda define o que o modelo vai perseguir.",
+    },
+    {
+      q: 'Por que o modelo corrige com passos pequenos em vez de eliminar o erro de uma vez?',
+      options: [
+        'Para economizar memória',
+        'Porque cada exemplo tem ruído; passos pequenos deixam o padrão real se acumular e o ruído se cancelar',
+        'Porque a matemática não permite passos grandes',
+        'Para ficar mais fácil de depurar',
+      ],
+      answer: 1,
+      why: 'Corrigir o erro inteiro de um exemplo faria o próximo exemplo apagar o anterior. Passo pequeno é como o modelo acumula evidência ao longo de muitos exemplos.',
+    },
+    {
+      q: 'Um modelo de fraude tem perda baixíssima e mesmo assim causa prejuízo. Explicação mais provável?',
+      options: [
+        'A learning rate estava errada',
+        'A função de perda não representa o custo real: falso positivo e falso negativo custam valores muito diferentes para o negócio',
+        'Faltaram camadas',
+        'O dataset era pequeno demais',
+      ],
+      answer: 1,
+      why: 'O modelo minimiza exatamente o que você escreveu na perda. Se ela trata os dois tipos de erro como iguais e o negócio não trata, o ótimo matemático fica longe do ótimo econômico.',
+    },
+  ]}
+/>

@@ -97,9 +97,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             >
               IA
             </span>
-            <span className="text-[15px] font-semibold tracking-tight text-ink">
-              IA do Zero
-            </span>
+            <span className="text-[15px] font-semibold tracking-tight text-ink">IA do Zero</span>
           </Link>
 
           <div className="ml-auto flex items-center gap-2">

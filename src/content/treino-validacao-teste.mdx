@@ -1,0 +1,105 @@
+<TLDR>
+  Separar dados cria três ambientes com funções diferentes: **treino ajusta, validação escolhe e
+  teste mede**. Se uma decisão usou um conjunto, esse conjunto já não representa dados inteiramente
+  novos.
+
+</TLDR>
+
+<Analogy>
+Um estudante resolve exercícios, faz simulados e presta a prova final. Os exercícios servem para mudar o jeito de estudar. Os simulados ajudam a escolher entre resumos, flashcards e aulas. A prova final mede o resultado depois que todas essas escolhas acabaram.
+
+Se o estudante vê a prova antes e adapta o estudo às questões, a nota deixa de medir domínio do assunto. Ela mede adaptação àquela prova.
+
+</Analogy>
+
+## Três conjuntos, três papéis
+
+O conjunto de **treino** é o único que ajusta os parâmetros do modelo. Cada exemplo participa do cálculo da perda e empurra pesos. Uma acurácia alta aqui só prova que o modelo se ajustou aos dados disponíveis. Pode ter aprendido um padrão geral ou apenas memorizado exceções.
+
+O conjunto de **validação** não atualiza pesos. Ele orienta decisões feitas por quem treina: arquitetura, regularização, learning rate, quantidade de épocas e threshold. Também permite <Term id="early-stopping">early stopping</Term>: parar quando o treino continua melhorando, mas o desempenho fora dele começa a piorar.
+
+O conjunto de **teste** fica fechado até o fim. Depois de escolher o processo inteiro, roda-se a avaliação uma vez para estimar o desempenho que interessa: o de dados nunca usados em decisão alguma.
+
+<Demo id="data-split" />
+
+## Por que validação não é teste
+
+Suponha que você compare muitas configurações e escolha aquela com melhor resultado no mesmo conjunto. Mesmo sem atualizar um peso diretamente, você ajustou o processo aos exemplos desse conjunto. Algumas configurações terão bom resultado por acaso. Quanto mais tentativas, maior a chance de selecionar uma coincidência.
+
+É por isso que chamar a validação de teste não resolve. O nome não protege o dado. Se o resultado influenciou uma escolha, virou validação. O teste é um recurso escasso justamente porque perde seu papel a cada consulta. Depois de olhar e alterar o sistema, você precisa de outro conjunto intocado para uma medida honesta.
+
+## Pouco dado e dados com ordem
+
+Quando o dataset é pequeno, reservar uma parte grande para validação produz estimativas instáveis. A validação cruzada k-fold divide os exemplos em k partes. Treina-se k vezes, usando cada parte como validação uma vez e as demais como treino. A média resume o resultado; a variação entre folds mostra quanto a conclusão depende da divisão. Uma média boa com grande dispersão merece desconfiança.
+
+Séries temporais exigem outra lógica. Sortear linhas permite que o modelo aprenda com dezembro e seja avaliado em março do mesmo ano. Isso vaza o futuro. O corte deve respeitar o relógio: passado para treino, período posterior para validação e o trecho mais recente para teste. Em validação com várias janelas, cada treino termina antes de sua avaliação.
+
+<Callout type="trap" title="Vazamento acontece antes do treino">
+  Normalizar usando média e desvio do dataset inteiro deixa informações da validação entrarem no
+  treino. Deduplicar depois do split pode pôr cópias quase idênticas dos dois lados. E dividir
+  linhas ao acaso pode colocar compras do mesmo cliente em treino e teste. O pipeline deve aprender
+  toda transformação apenas no treino e preservar entidades relacionadas no mesmo lado do corte.
+
+</Callout>
+
+## O corte precisa imitar o uso
+
+Um split aleatório pressupõe que exemplos futuros virão da mesma mistura independente dos atuais. Essa hipótese falha quando há clientes recorrentes, hospitais diferentes, máquinas específicas ou versões sucessivas de um documento. Nesses casos, o teste fácil mede reconhecimento da entidade, não generalização.
+
+O critério correto depende da pergunta. Se o sistema receberá novos eventos de clientes conhecidos, separar por evento pode fazer sentido. Se precisa atender clientes nunca vistos, separe por cliente. O teste deve reproduzir a fronteira real entre o que estará conhecido e desconhecido quando o modelo operar.
+
+<Deep>
+No split estratificado, cada conjunto preserva aproximadamente a proporção das classes. Isso reduz a chance de uma classe rara desaparecer da validação por puro acaso. Estratificação não corrige dependência: quando uma pessoa gera várias linhas, primeiro forme grupos por pessoa e distribua grupos inteiros. Se necessário, combine agrupamento e estratificação no nível da entidade.
+
+Considere dados independentes amostrados da mesma distribuição. A estimativa de uma métrica no teste tem variância finita; ela não é uma verdade exata. Repetir consultas e escolher a versão com melhor teste condiciona essa estimativa ao acaso favorável. Na prática, o teste passa a integrar o algoritmo de seleção e seu erro fica otimista.
+
+Pipelines evitam um vazamento comum. Ajuste imputação, vocabulário, seleção de features e escalonamento apenas no fold de treino; depois aplique as transformações congeladas no fold de validação. Fazer seleção de features uma vez antes da validação cruzada invalida todos os folds.
+
+Benchmarks públicos de LLMs tornam a separação mais difícil. Questões e respostas podem aparecer em páginas usadas no pré-treino, em repositórios ou em dados sintéticos derivados delas. Mesmo sem fraude deliberada, o teste pode estar contaminado. Deduplicação aproximada, conjuntos privados e avaliações renovadas reduzem o risco, mas não provam ausência de contato. Nesse cenário, interpretar a nota exige tratar a procedência do dado como parte do experimento.
+
+</Deep>
+
+<Callout type="info">
+  Um bom relatório descreve a unidade do split, a ordem temporal, as transformações ajustadas e
+  quantas decisões consultaram a validação. A porcentagem de linhas em cada conjunto, sozinha, não
+  permite auditar o experimento.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é o papel correto do conjunto de teste?',
+      options: [
+        'Escolher a learning rate',
+        'Parar o treino no melhor momento',
+        'Medir uma vez o processo já escolhido',
+        'Ajustar os parâmetros que faltaram',
+      ],
+      answer: 2,
+      why: 'Learning rate e momento de parada são escolhas feitas com validação. O teste só estima o resultado final depois que o processo inteiro foi congelado.',
+    },
+    {
+      q: 'Por que consultar o teste após cada uma de muitas configurações é um problema?',
+      options: [
+        'Porque deixa o treino mais lento',
+        'Porque as escolhas passam a se ajustar ao acaso específico do teste',
+        'Porque o teste atualiza os pesos automaticamente',
+        'Porque reduz o número de classes',
+      ],
+      answer: 1,
+      why: 'Mesmo sem gradiente, escolher com base no resultado usa informação do teste. Ele vira validação e tende a produzir uma estimativa otimista.',
+    },
+    {
+      q: 'Como dividir dados quando cada cliente aparece em muitas linhas e o uso exige prever clientes novos?',
+      options: [
+        'Sortear todas as linhas independentemente',
+        'Ordenar as linhas pelo valor da feature principal',
+        'Manter todas as linhas de cada cliente no mesmo conjunto',
+        'Duplicar clientes raros nos três conjuntos',
+      ],
+      answer: 2,
+      why: 'Agrupar por cliente impede que a identidade e o histórico da mesma entidade apareçam dos dois lados, o que imita a chegada de clientes realmente novos.',
+    },
+  ]}
+/>

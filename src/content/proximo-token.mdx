@@ -1,0 +1,125 @@
+<TLDR>
+  O modelo nunca escolhe uma resposta. Ele produz uma **probabilidade para cada token possível** e
+  alguém precisa sortear um. Temperature, top-k e top-p são as regras desse sorteio — e não deixam o
+  modelo mais inteligente.
+
+</TLDR>
+
+<Analogy>
+Um baralho enorme, uma carta por token do vocabulário. Depois de ler o texto até aqui, o modelo empilha o baralho: dá mais cartas às continuações prováveis e menos às improváveis. Se `azul` merece 40%, ele coloca 40% das cartas do monte como `azul`.
+
+Aí você tira uma carta. Como você tira é sua escolha:
+
+- Sempre pegar a carta mais numerosa (greedy).
+- Descartar todas as cartas fora das 10 mais numerosas e sortear entre elas (top-k).
+- Descartar a cauda até sobrar 90% do monte e sortear (top-p).
+- Reembaralhar deixando o monte mais uniforme ou mais concentrado (temperature).
+
+O baralho é o mesmo em todos os casos. Só o método de tirar muda.
+
+</Analogy>
+
+<Demo id="sampling" />
+
+## Logits, softmax, probabilidade
+
+A última camada do <Ref to="transformer">Transformer</Ref> devolve um número por token do vocabulário. Esses números crus são os **logits**: não somam nada em particular e podem ser negativos.
+
+O <Term id="softmax">softmax</Term> os transforma em probabilidades: exponencia cada um e divide pela soma. Exponenciar é o detalhe importante — ele amplifica diferenças. Um logit dois pontos acima dos outros não fica "um pouco" mais provável, fica várias vezes mais provável.
+
+## Temperature
+
+A temperature divide os logits antes do softmax:
+
+- **Baixa (0.1–0.5)**: as diferenças aumentam. O topo domina, a saída fica repetitiva e previsível.
+- **1.0**: a distribuição que o modelo realmente aprendeu, sem modificação.
+- **Alta (1.5–2.0)**: as diferenças achatam. Tokens improváveis ganham chance real, e o texto fica criativo — até virar incoerência.
+
+Não existe temperature "correta". Extração de dados de um documento quer 0. Brainstorm de nomes quer 1.0 ou mais.
+
+<Callout type="warn" title="Temperature 0 não é determinismo garantido">
+Com temperature 0 a escolha vira sempre o token de maior probabilidade, o que parece determinístico. Na prática, servidores de LLM frequentemente produzem saídas diferentes para a mesma entrada: operações em ponto flutuante não são associativas, e a ordem das somas muda conforme o *batch* em que sua requisição caiu. A variação é pequena, mas basta para trocar o topo num empate apertado.
+
+Se você precisa de reprodutibilidade, guarde a saída. Não conte com o modelo.
+
+</Callout>
+
+## Top-k e top-p
+
+Ambos cortam a cauda antes do sorteio, com filosofias diferentes:
+
+**Top-k** mantém os k tokens mais prováveis, fixo. Problema: k=10 é generoso demais quando o modelo tem certeza (o segundo lugar já é lixo) e apertado demais quando ele está genuinamente indeciso entre trinta opções válidas.
+
+**Top-p** (nucleus) mantém o menor conjunto cujas probabilidades somem p. Ele se adapta: se o topo tem 95% sozinho, sobra um candidato; se a distribuição é plana, sobram muitos. Por isso top-p é o padrão na maioria das APIs.
+
+O corte importa porque a cauda é enorme. Um vocabulário de 100 mil tokens tem dezenas de milhares de opções com probabilidade minúscula mas não nula. Sem corte, o modelo eventualmente sorteia uma delas — e uma única palavra absurda desanda o resto do texto, porque ela entra no contexto e o modelo passa a continuar dali.
+
+<Callout type="trap">
+"Aumentar a temperature deixa o modelo mais criativo" é meia verdade. Temperature não cria ideia nova: ela apenas dá mais chance às opções que o modelo já considerava improváveis. Se a boa resposta não estava na distribuição, nenhum ajuste de amostragem a inventa.
+
+E o inverso engana ainda mais gente: temperature 0 não deixa o modelo mais correto. Só o deixa mais consistentemente igual a si mesmo — inclusive quando está errado.
+
+</Callout>
+
+## Consequências práticas
+
+- **Repetição** costuma vir de temperature baixa demais, não de falta de capacidade. Penalidades de repetição atacam o sintoma; frequentemente o ajuste certo é o prompt.
+- **Auto-consistência**: gerar a mesma resposta cinco vezes com temperature moderada e ficar com a mais frequente melhora tarefas de raciocínio. Custa cinco vezes mais.
+- Para saída estruturada (JSON, chamadas de ferramenta), temperature baixa e, se disponível, **decodificação restrita** por gramática — que zera a probabilidade de qualquer token que quebraria o schema.
+
+<Deep>
+$$
+p_i = \frac{e^{z_i / T}}{\sum_j e^{z_j / T}}
+$$
+
+Com $T \to 0$ a distribuição converge para um one-hot no argmax; com $T \to \infty$, para a uniforme.
+
+**Ordem das operações.** As APIs aplicam temperature primeiro, depois os filtros top-k/top-p, e renormalizam o que sobrou. Combinar temperature alta com top-p apertado é comum e coerente: você achata a distribuição para diversificar, mas continua barrando a cauda absurda.
+
+**Log-probs.** Muitas APIs devolvem o log da probabilidade de cada token escolhido e dos alternativos. Isso é a matéria-prima para estimar confiança, detectar passos de alta <Term id="alucinacao">incerteza</Term> e implementar filtros. É subutilizado — vale conhecer.
+
+**Beam search.** Manter várias sequências parciais e escolher a de maior probabilidade total é padrão em tradução, onde existe uma resposta "mais correta". Em texto aberto, beam search produz saídas estranhamente genéricas e repetitivas: a sequência globalmente mais provável raramente é a mais interessante. Foi essa observação que popularizou o nucleus sampling.
+
+**Penalidades.** `frequency_penalty` reduz o logit proporcionalmente a quantas vezes o token já apareceu; `presence_penalty` aplica um desconto fixo se ele apareceu ao menos uma vez. São correções brutas, aplicadas sobre os logits antes do softmax, e é fácil exagerar e desandar a gramática.
+
+**Custo.** Cada token gerado exige uma passada completa pelo modelo — todos os pesos lidos da memória. É por isso que a saída custa mais que a entrada, e por que <Ref to="prompting">chain-of-thought</Ref> é uma decisão de orçamento e não só de qualidade.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que a temperature faz, exatamente?',
+      options: [
+        'Muda o conhecimento do modelo',
+        'Divide os logits antes do softmax, achatando ou concentrando a distribuição',
+        'Escolhe quantos tokens gerar',
+        'Aumenta o tamanho do vocabulário',
+      ],
+      answer: 1,
+      why: 'É uma operação sobre a distribuição já produzida. O modelo calculou os mesmos logits; a temperature só altera o quanto as diferenças entre eles pesam no sorteio.',
+    },
+    {
+      q: 'Por que top-p costuma ser preferido a top-k?',
+      options: [
+        'Porque é mais rápido',
+        'Porque se adapta: mantém poucos candidatos quando o modelo tem certeza e muitos quando ele está indeciso',
+        'Porque nunca corta nenhum token',
+        'Porque funciona com temperature 0',
+      ],
+      answer: 1,
+      why: 'k fixo é generoso demais numa distribuição concentrada e apertado demais numa distribuição plana. Top-p corta pela massa de probabilidade, então o tamanho do conjunto varia com a incerteza real.',
+    },
+    {
+      q: 'Uma resposta veio errada. Baixar a temperature para 0 resolve?',
+      options: [
+        'Sim, temperature 0 dá a resposta correta',
+        'Não: temperature 0 só torna a saída consistente, inclusive consistentemente errada',
+        'Sim, desde que também use top-k',
+        'Só em modelos grandes',
+      ],
+      answer: 1,
+      why: 'Amostragem escolhe dentro do que o modelo já achava provável. Se a resposta certa não estava lá com peso, nenhum ajuste de sorteio a traz. O problema é de contexto, de prompt ou de conhecimento — não de decodificação.',
+    },
+  ]}
+/>

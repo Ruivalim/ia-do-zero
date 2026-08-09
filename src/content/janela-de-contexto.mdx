@@ -1,0 +1,127 @@
+<TLDR>
+  A janela de contexto é tudo que o modelo consegue enxergar numa chamada: instrução, histórico,
+  documentos e a resposta que ele está escrevendo. O que não cabe **não existe** — não é esquecido,
+  nunca chegou.
+
+</TLDR>
+
+<Analogy>
+Uma mesa de trabalho de tamanho fixo. Você espalha nela os papéis de que precisa: o pedido do cliente, dois relatórios, o rascunho.
+
+A mesa não cresce. Quando você põe um papel novo e não há espaço, alguém tira um dos antigos e joga fora — não guarda numa gaveta, joga fora mesmo. Se você perguntar depois sobre aquele papel, a pessoa na mesa vai responder com sinceridade que nunca viu esse documento.
+
+O modelo é essa pessoa. Ele não tem gaveta. Só mesa.
+
+</Analogy>
+
+<Demo id="context-window" />
+
+## O que ocupa a janela
+
+Todos concorrem pelo mesmo espaço:
+
+- O **system prompt** — que em produtos reais costuma ser longo, e é pago em toda chamada.
+- As definições de <Ref to="agentes">ferramentas</Ref>, se houver. Cada schema JSON custa tokens.
+- O **histórico da conversa** inteiro. É por isso que conversas longas ficam caras e lentas: você reenvia tudo a cada turno.
+- Os **documentos recuperados** pelo <Ref to="rag">RAG</Ref>.
+- A **resposta sendo gerada**, que vai consumindo espaço enquanto sai.
+
+Um modelo com janela de 200 mil tokens e um system prompt de 8 mil não tem 200 mil úteis. E se você usa raciocínio longo, os tokens de pensamento também ocupam.
+
+## Não há memória entre chamadas
+
+Esse é o ponto que mais confunde. Um LLM é **sem estado**. Cada requisição é independente. A sensação de que o assistente "lembra" da conversa vem de o cliente reenviar o histórico inteiro a cada mensagem.
+
+Quando o histórico não cabe mais, alguma estratégia de gestão entra em cena, e a escolha é sua:
+
+<Steps
+  items={[
+    [
+      'Truncar',
+      'Descartar as mensagens mais antigas. Simples e brutal: o modelo perde o começo, inclusive combinações feitas lá atrás.',
+    ],
+    [
+      'Resumir',
+      'Comprimir o trecho antigo em um resumo e manter o resumo. Preserva o essencial e perde o literal — e o resumo pode errar.',
+    ],
+    [
+      'Recuperar',
+      'Guardar tudo fora do modelo e trazer de volta só os trechos relevantes. É RAG aplicado ao próprio histórico.',
+    ],
+    [
+      'Memória externa',
+      'Extrair fatos duráveis para um armazenamento estruturado e reinjetar os relevantes. Mais trabalho, muito mais controle.',
+    ],
+  ]}
+/>
+
+<Callout type="trap" title="Perdido no meio">
+Janela grande não significa atenção uniforme. Vários estudos mostram um padrão em U: modelos usam bem o que está no **começo** e no **fim** do contexto, e usam mal o que está no meio. Enfiar 300 páginas e perguntar sobre o parágrafo do meio é a receita para uma resposta ruim com aparência confiante.
+
+Consequência prática: coloque a instrução e o dado mais importante nas pontas. Menos contexto bem escolhido costuma bater mais contexto despejado.
+
+</Callout>
+
+## O custo é quadrático (e a memória, linear)
+
+O custo de <Ref to="self-attention">attention</Ref> cresce com o quadrado do número de tokens: dobrar o contexto quadruplica essa parte da conta. Já o KV cache — a memória que guarda keys e values dos tokens anteriores para não recalcular tudo a cada token novo — cresce linearmente, e costuma ser o que realmente estoura a GPU em produção.
+
+Junte os dois e você entende por que "cabe na janela" e "vale a pena" são perguntas diferentes. Um prompt de 100 mil tokens é lento no primeiro token, caro em toda chamada, e provavelmente pior em qualidade do que 5 mil tokens bem selecionados.
+
+<Callout type="ok" title="Cache de prompt">
+Se o começo do seu prompt é estável — system prompt, ferramentas, documentos fixos — muitos provedores permitem cacheá-lo, e as chamadas seguintes pagam bem menos por esse prefixo.
+
+Para aproveitar, mantenha o conteúdo estável **no começo** e o variável no fim. Trocar uma vírgula no system prompt invalida o cache inteiro.
+
+</Callout>
+
+<Deep>
+**Contas de KV cache.** A memória é aproximadamente $2 \times L \times H_{kv} \times d_{head} \times n \times \text{bytes}$, onde $L$ é o número de camadas, $H_{kv}$ o número de cabeças de key/value e $n$ o comprimento. Os fatores: 2 por guardar K e V; multiplique pelo tamanho do lote se estiver servindo vários usuários. Em modelos grandes com contexto longo isso passa facilmente da dezena de gigabytes por sessão — mais que os próprios pesos.
+
+Daí vêm as otimizações: **MQA** (uma única cabeça de key/value compartilhada por todas as cabeças de query) e **GQA** (grupos), que cortam $H_{kv}$ por um fator grande com pouca perda de qualidade. Quantizar o KV cache para 8 bits é outra alavanca comum.
+
+**Como janelas gigantes são conseguidas.** Não é só treinar com sequências longas — seria caro demais. A receita típica combina RoPE com interpolação ou ajuste da base de frequência, mais uma fase curta de treino em contexto longo. Isso explica por que a qualidade em contexto muito longo costuma ser desigual: a maior parte do treino aconteceu em sequências curtas.
+
+**Prefill × decode.** São dois regimes. O prefill processa o prompt inteiro em paralelo e é limitado por compute — é o que determina o tempo até o primeiro token. O decode gera um token por vez e é limitado por banda de memória — é o que determina os tokens por segundo. Otimizações diferentes servem a cada um.
+
+**Avaliar contexto longo.** O teste da "agulha no palheiro" (esconder uma frase e pedir que o modelo a recupere) é fácil demais e passa em quase tudo. Avaliações úteis exigem raciocínio sobre múltiplos trechos distantes entre si, que é onde os modelos ainda tropeçam.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Um LLM lembra da conversa anterior entre chamadas de API?',
+      options: [
+        'Sim, ele guarda um histórico interno',
+        'Não: o modelo é sem estado e o cliente reenvia o histórico inteiro a cada mensagem',
+        'Só se a temperature for 0',
+        'Só nos modelos com janela grande',
+      ],
+      answer: 1,
+      why: 'Cada requisição é independente. A memória aparente é o cliente remontando o contexto a cada turno — e é também por isso que conversas longas ficam progressivamente mais caras.',
+    },
+    {
+      q: 'Por que dobrar o tamanho do contexto mais que dobra o custo?',
+      options: [
+        'Porque o vocabulário cresce',
+        'Porque attention compara todos os pares de tokens, e o número de pares cresce com o quadrado',
+        'Porque o modelo precisa de mais camadas',
+        'Porque o tokenizador fica mais lento',
+      ],
+      answer: 1,
+      why: 'n tokens geram n² pares na matriz de atenção. O KV cache cresce linearmente, mas a attention cresce quadraticamente — é ela que domina a conta em contextos grandes.',
+    },
+    {
+      q: 'Você tem 200 páginas de documento e uma pergunta específica. Melhor abordagem?',
+      options: [
+        'Colar tudo no prompt, já que cabe na janela',
+        'Recuperar os trechos relevantes e enviar só eles, colocando a instrução nas pontas do contexto',
+        'Dividir em 200 chamadas, uma por página',
+        'Reduzir a temperature',
+      ],
+      answer: 1,
+      why: "Caber não é o mesmo que funcionar. Contexto cheio é caro, lento e sofre do efeito 'perdido no meio'. Seleção com RAG costuma dar resposta melhor e mais barata.",
+    },
+  ]}
+/>

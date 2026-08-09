@@ -27,7 +27,7 @@ export const GLOSSARY: Record<string, Entry> = {
     short: 'Machine learning com redes neurais de muitas camadas.',
     see: 'rede-multicamada',
   },
-  'genai': {
+  genai: {
     term: 'IA generativa',
     short: 'Modelos que produzem conteúdo novo (texto, imagem, áudio) em vez de só classificar.',
     see: 'o-que-e-ia',
@@ -398,7 +398,7 @@ export const GLOSSARY: Record<string, Entry> = {
     short: 'Usar o modelo já treinado. Onde vai quase todo o custo em produção.',
     see: 'quantizacao',
   },
-  'destilacao': {
+  destilacao: {
     term: 'Destilação',
     short: 'Treinar um modelo pequeno para imitar a saída de um grande.',
     see: 'quantizacao',

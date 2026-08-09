@@ -1,0 +1,113 @@
+<TLDR>
+  Backpropagation calcula quanto cada parâmetro contribuiu para o erro aplicando a regra da cadeia
+  de trás para frente. Ele **calcula gradientes; o otimizador é que atualiza os pesos**.
+
+</TLDR>
+
+<Analogy>
+Uma fábrica entrega uma peça fora da medida. A última estação sabe o erro final. Para descobrir responsabilidades, ela informa à etapa anterior quanto uma pequena mudança em sua saída alteraria o defeito. Cada estação combina esse sinal com sua própria sensibilidade e repassa a culpa.
+
+O relatório chega até a primeira máquina sem refazer todas as combinações possíveis. Depois, outra equipe decide quanto ajustar cada controle.
+
+</Analogy>
+
+## O problema do crédito
+
+Uma rede pode ter muitos pesos entre entrada e saída. Alterar um peso inicial muda uma ativação, que muda outras ativações, até chegar à perda. Testar cada peso separadamente exigiria um forward adicional por parâmetro e seria inviável.
+
+Backprop resolve esse problema de atribuição de crédito. No forward, calcula a previsão e guarda valores intermediários. No backward, começa pela derivada da perda e percorre as operações ao contrário, multiplicando derivadas locais pela influência recebida.
+
+<Demo id="backprop" />
+
+O reaproveitamento é a chave. Uma derivada intermediária usada por muitos pesos é calculada uma vez e distribuída aos caminhos anteriores. A regra da cadeia deixa de ser uma expansão gigantesca e vira passagem estruturada por um grafo.
+
+## Duas passadas, dois papéis
+
+O forward responde “o que o modelo prevê?”. O backward responde “como a perda mudaria se cada valor mudasse um pouco?”. Ao final, cada parâmetro tem um gradiente.
+
+Nada foi atualizado ainda. SGD, momentum ou Adam leem esses gradientes, combinam-nos com learning rate e estado, e então alteram os parâmetros. Separar as etapas permite usar o mesmo backprop com otimizadores diferentes.
+
+<Callout type="trap">
+  Backpropagation não é um algoritmo de aprendizado completo. É diferenciação eficiente. A função de
+  perda define o objetivo; os dados fornecem exemplos; o otimizador decide o passo. Trocar backprop
+  por uma descrição vaga de “aprender com o erro” esconde essas decisões.
+
+</Callout>
+
+## Sinais que atravessam camadas
+
+A regra da cadeia multiplica sensibilidades sucessivas. Se os fatores são repetidamente menores que um, o gradiente das primeiras camadas desaparece. Se são maiores, explode. O forward pode parecer normal enquanto o backward chega quase zero ou não finito às camadas distantes.
+
+Esse problema é severo em <Ref to="rnn-e-sequencias">RNNs</Ref>, onde os mesmos tipos de transformação se repetem por muitos passos. Conexões residuais do <Ref to="transformer">Transformer</Ref> criam caminhos aditivos curtos para sinal e gradiente, reduzindo a dependência de longos produtos.
+
+Inicialização, ativação e normalização também controlam escala. Gradient clipping limita explosões, mas não recupera um gradiente que já desapareceu. Medir normas por camada revela onde o fluxo se rompe.
+
+## Tempo e memória
+
+O backward percorre operações semelhantes às do forward e calcula derivadas para entradas e parâmetros. Seu custo costuma ter a mesma ordem e ficar aproximadamente na escala de outro forward, embora a proporção dependa das operações.
+
+A memória é a surpresa. Para derivar uma multiplicação ou ativação, o backward precisa de valores produzidos no forward. Treinar guarda ativações por camada e por exemplo do lote. Em redes profundas, sequências longas ou imagens grandes, essas ativações podem dominar a VRAM mesmo quando os pesos cabem com folga.
+
+<Deep>
+Considere uma composição escalar $L=f(g(h(x)))$. A regra da cadeia dá
+
+$$
+\frac{dL}{dx}=\frac{df}{dg}\frac{dg}{dh}\frac{dh}{dx}
+$$
+
+Em redes, escalares viram tensores e derivadas locais viram produtos vetor-Jacobiano. Diferenciação automática registra um grafo computacional no forward: nós são valores; arestas representam operações e suas regras de derivada. No backward, acumula contribuições quando vários caminhos chegam ao mesmo valor.
+
+O modo reverso é ideal quando há uma saída escalar, a perda, e muitos parâmetros. Uma única passagem reversa produz derivadas para todos eles. O modo direto propagaria uma direção de entrada por vez e seria adequado ao caso oposto: poucas entradas e muitas saídas.
+
+Backprop through time aplica exatamente o mesmo mecanismo a um grafo recorrente desenrolado. Compartilhar parâmetros significa somar contribuições vindas de todos os passos antes da atualização.
+
+Gradient checkpointing troca memória por compute. Em vez de guardar toda ativação, preserva apenas pontos escolhidos. Durante o backward, refaz partes do forward para reconstruir valores descartados. O gradiente permanece o mesmo salvo diferenças numéricas, mas o treino executa trabalho adicional.
+
+Em um Transformer, ativações crescem com tamanho do lote, comprimento da sequência, largura e número de camadas. Matrizes temporárias de attention também pesam. Por isso reduzir precisão dos pesos não resolve sozinho a memória de treino; checkpointing, kernels que evitam materializações e lotes menores atacam componentes diferentes.
+
+</Deep>
+
+<Callout type="ok">
+  Um teste útil de implementação compara o gradiente automático com uma diferença finita em uma rede
+  minúscula. Faça isso em poucos parâmetros e longe de pontos não diferenciáveis: diferenças finitas
+  são lentas e numericamente delicadas, mas boas para auditoria local.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a saída principal do backpropagation?',
+      options: [
+        'Novos exemplos de treino',
+        'Gradientes da perda em relação aos parâmetros',
+        'O threshold de produção',
+        'Os pesos já atualizados pelo Adam',
+      ],
+      answer: 1,
+      why: 'Backprop calcula derivadas. A atualização só acontece quando um otimizador transforma essas derivadas em passos.',
+    },
+    {
+      q: 'Por que guardar ativações do forward?',
+      options: [
+        'Para usá-las no cálculo das derivadas locais no backward',
+        'Para substituir o conjunto de validação',
+        'Para tornar a inferência causal',
+        'Para evitar qualquer recomputação no próximo lote',
+      ],
+      answer: 0,
+      why: 'Muitas regras de derivada dependem dos valores calculados na ida. Guardá-los reduz recomputação, mas aumenta memória.',
+    },
+    {
+      q: 'O que gradient checkpointing troca?',
+      options: [
+        'Acurácia por mais parâmetros',
+        'Compute extra por menor memória de ativações',
+        'Validação por teste',
+        'Gradiente reverso por busca aleatória',
+      ],
+      answer: 1,
+      why: 'O método descarta parte das ativações e refaz trechos do forward quando o backward precisa delas. Assim economiza memória e gasta mais cálculo.',
+    },
+  ]}
+/>

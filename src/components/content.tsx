@@ -4,6 +4,7 @@ import { useApp } from '../lib/store'
 import { BY_SLUG } from '../lib/curriculum'
 import { GLOSSARY } from '../lib/glossary'
 import { DEMOS } from '../demos/registry'
+import DemoBoundary from './DemoBoundary'
 
 const cx = (...p: (string | false | null | undefined)[]) => p.filter(Boolean).join(' ')
 
@@ -25,7 +26,13 @@ export function TLDR({ children }: { children: ReactNode }) {
 }
 
 /** Everyday-life comparison. Deliberately imprecise; that is the point. */
-export function Analogy({ children, title = 'A analogia' }: { children: ReactNode; title?: string }) {
+export function Analogy({
+  children,
+  title = 'A analogia',
+}: {
+  children: ReactNode
+  title?: string
+}) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/50 p-4">
       <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold tracking-wide text-faint uppercase">
@@ -76,7 +83,13 @@ export function Callout({
  * The technical layer. Collapsed while the global switch says "Simples",
  * open while it says "Técnico" — but the reader can always override locally.
  */
-export function Deep({ children, title = 'Por baixo do capô' }: { children: ReactNode; title?: string }) {
+export function Deep({
+  children,
+  title = 'Por baixo do capô',
+}: {
+  children: ReactNode
+  title?: string
+}) {
   const { depth } = useApp()
   const [override, setOverride] = useState<boolean | null>(null)
   const open = override ?? depth === 'tecnico'
@@ -176,7 +189,9 @@ export function Demo({ id, title, note }: { id: string; title?: string; note?: s
             </div>
           }
         >
-          <Component />
+          <DemoBoundary id={id}>
+            <Component />
+          </DemoBoundary>
         </Suspense>
       </div>
       {(note ?? entry.note) && (
@@ -292,7 +307,9 @@ export function Quiz({ questions }: { questions: QuizQ[] }) {
                       </span>
                       {opt}
                       {answered && isRight && <span className="ml-2 text-emerald">✓</span>}
-                      {answered && isPicked && !isRight && <span className="ml-2 text-rose">✗</span>}
+                      {answered && isPicked && !isRight && (
+                        <span className="ml-2 text-rose">✗</span>
+                      )}
                     </button>
                   )
                 })}

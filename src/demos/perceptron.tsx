@@ -1,5 +1,18 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { Btn, Caption, Choice, Controls, Grid, Legend, Plot, Row, Slider, Stat, Stats, VIZ } from '../components/ui'
+import {
+  Btn,
+  Caption,
+  Choice,
+  Controls,
+  Grid,
+  Legend,
+  Plot,
+  Row,
+  Slider,
+  Stat,
+  Stats,
+  VIZ,
+} from '../components/ui'
 import { useInterval } from '../lib/hooks'
 import { fmt, gaussian, rng } from '../lib/mathx'
 
@@ -58,7 +71,8 @@ export default function PerceptronDemo() {
   const data = useMemo(() => makeData(set), [set])
 
   const predict = useCallback(
-    (s: Sample, weights: Weights) => (weights.w1 * s.x + weights.w2 * s.y + weights.b >= 0 ? 1 : -1),
+    (s: Sample, weights: Weights) =>
+      weights.w1 * s.x + weights.w2 * s.y + weights.b >= 0 ? 1 : -1,
     [],
   )
 
@@ -67,17 +81,14 @@ export default function PerceptronDemo() {
     [data, w, predict],
   )
 
-  const reset = useCallback(
-    (nextSet?: SetName) => {
-      setRunning(false)
-      setW(INITIAL)
-      setSteps(0)
-      setLastIdx(null)
-      cursor.current = 0
-      if (nextSet) setSet(nextSet)
-    },
-    [],
-  )
+  const reset = useCallback((nextSet?: SetName) => {
+    setRunning(false)
+    setW(INITIAL)
+    setSteps(0)
+    setLastIdx(null)
+    cursor.current = 0
+    if (nextSet) setSet(nextSet)
+  }, [])
 
   /** One perceptron update: walk to the next misclassified point and nudge. */
   const step = useCallback(() => {
@@ -196,7 +207,14 @@ export default function PerceptronDemo() {
           return (
             <g key={i}>
               {i === lastIdx && (
-                <circle cx={toPx(s.x)} cy={toPy(s.y)} r={13} fill="none" stroke={VIZ.c} strokeWidth={1.5} />
+                <circle
+                  cx={toPx(s.x)}
+                  cy={toPy(s.y)}
+                  r={13}
+                  fill="none"
+                  stroke={VIZ.c}
+                  strokeWidth={1.5}
+                />
               )}
               <circle
                 cx={toPx(s.x)}
@@ -246,8 +264,8 @@ export default function PerceptronDemo() {
 
       <Caption>
         Círculo vazado = ponto que o neurônio ainda erra. O anel amarelo marca o exemplo usado na
-        última correção. Em XOR nenhuma reta separa os quatro cantos, então as correções nunca
-        param — foi esse resultado que congelou a pesquisa em redes neurais nos anos 70.
+        última correção. Em XOR nenhuma reta separa os quatro cantos, então as correções nunca param
+        — foi esse resultado que congelou a pesquisa em redes neurais nos anos 70.
       </Caption>
     </div>
   )

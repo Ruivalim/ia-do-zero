@@ -1,0 +1,124 @@
+<TLDR>
+  Alucinação não é mentira nem bug. É o comportamento normal de um sistema treinado para produzir a
+  continuação **mais plausível** — em uma situação onde a continuação plausível não é a verdadeira.
+
+</TLDR>
+
+<Analogy>
+Um aluno numa prova oral que não pode dizer "não sei". Ele leu muita coisa sobre o assunto geral e absorveu o formato de uma boa resposta: o tom, a estrutura, o tipo de detalhe que aparece.
+
+Perguntam a data exata de um decreto que ele nunca viu. Ele não fica em silêncio — produz uma resposta com a cara certa. Número plausível, formato correto, entonação confiante. Está errada, e ele não tem como saber, porque o que ele aprendeu foi a **forma** da resposta certa, não o fato.
+
+</Analogy>
+
+<Demo id="hallucination" />
+
+## Por que acontece
+
+O modelo tem um objetivo: dado o contexto, atribuir probabilidade ao <Ref to="proximo-token">próximo token</Ref>. Não existe, em nenhum ponto dessa função, uma noção de "isto é verdade".
+
+Quando o texto pede um fato que o modelo memorizou bem, o token certo domina a distribuição e a resposta sai correta. Quando o fato é obscuro, raro, ou simplesmente não estava no treino, nenhum token domina — e o modelo emite mesmo assim o mais provável. O resultado tem a mesma fluência e a mesma cara de confiança.
+
+Repare no que isso implica: **o modelo não distingue lembrar de inventar**. Os dois passam pelo mesmo mecanismo.
+
+## Os tipos que aparecem na prática
+
+- **Fato inventado**: uma data, um número, uma lei que não existe.
+- **Citação fabricada**: o caso mais perigoso, porque tem formato verificável e parece rigor. Autores reais, revista real, título plausível, artigo inexistente.
+- **Referência a API ou biblioteca inexistente**: função com nome coerente com a convenção da biblioteca, que nunca foi implementada.
+- **Confabulação sobre o contexto**: o documento está ali no prompt e o modelo afirma algo que ele não diz.
+- **Falsa recusa**: dizer que não pode fazer algo que pode. É o mesmo fenômeno, com o sinal invertido.
+
+<Callout type="trap" title="Confiança não é sinal de correção">
+Não existe correlação confiável entre o quanto a resposta soa segura e o quanto ela está certa. A segurança do tom foi aprendida no <Ref to="rlhf-e-dpo">pós-treino</Ref>, onde avaliadores humanos preferiram respostas assertivas. Você treinou o modelo a soar seguro; ele soa seguro.
+
+Pior: pedir "responda apenas se tiver certeza" ajuda pouco. O modelo não tem acesso privilegiado ao próprio estado de conhecimento — ele gera a frase "tenho certeza" pelo mesmo mecanismo com que gera todo o resto.
+
+</Callout>
+
+## O que reduz de verdade
+
+Nenhuma técnica elimina. Estas reduzem de forma mensurável:
+
+<Steps
+  items={[
+    [
+      'Dar a fonte no contexto',
+      'RAG: se o trecho correto está no prompt, o token certo passa a dominar a distribuição. É a intervenção com melhor retorno.',
+    ],
+    [
+      'Exigir citação verificável',
+      'Peça que cada afirmação aponte para um trecho do contexto fornecido, e valide programaticamente que o trecho existe. O que não puder ser ancorado, corte.',
+    ],
+    [
+      'Dar saída de escape',
+      "Permitir explicitamente 'não está no material fornecido' aumenta a taxa de recusas corretas. Sem essa saída, o modelo preenche o vazio.",
+    ],
+    [
+      'Verificar fora do modelo',
+      'Executar o código, consultar a API, conferir o número na base. Ferramenta que verifica vale mais que prompt que pede cuidado.',
+    ],
+    [
+      'Medir',
+      "Sem uma suíte de eval com casos onde a resposta certa é 'não sei', você não sabe se piorou.",
+    ],
+  ]}
+/>
+
+<Callout type="warn" title="RAG reduz e cria um modo de falha novo">
+Com recuperação, o modelo passa a errar de outro jeito: recuperar o trecho errado e responder com confiança **baseado nele**. Agora existe uma citação, o que torna o erro mais convincente e mais difícil de pegar.
+
+Por isso a qualidade da <Ref to="rag">recuperação</Ref> importa mais que a do modelo nessa arquitetura. Se o trecho certo não está entre os recuperados, nenhum modelo salva.
+
+</Callout>
+
+<Deep>
+**Isso é eliminável?** Há um argumento teórico de que não, para modelos que produzem uma distribuição sobre continuações: existirão sempre perguntas cujo fato correto não está nos pesos nem no contexto, e o objetivo de máxima verossimilhança não tem como distinguir esse caso de um fato memorizado. Isso não é uma prova de impossibilidade prática — é uma razão para desconfiar de qualquer promessa de "modelo que não alucina".
+
+**Sinais úteis de incerteza.** Os log-probs dos tokens gerados dão uma estimativa barata: passos de entropia alta ou de baixa probabilidade do token escolhido marcam onde o modelo estava indeciso. Amostrar a mesma pergunta várias vezes e medir a divergência semântica entre as respostas (uma família de técnicas chamada _semantic entropy_) detecta confabulação melhor que qualquer prompt pedindo honestidade. Ambos custam chamadas extras.
+
+**Calibração.** Modelos base tendem a ser razoavelmente calibrados — a probabilidade prevista se aproxima da frequência real de acerto. O pós-treino por preferência tende a **piorar** a calibração, porque avaliadores premiam assertividade. É um trade-off explícito entre parecer útil e reportar incerteza honestamente.
+
+**Verificação, não geração.** A assimetria que sustenta os sistemas confiáveis: verificar costuma ser muito mais barato que gerar. Rodar o teste, executar a query, conferir se o CNPJ existe. Toda arquitetura séria em cima de LLM empurra a decisão final para um verificador determinístico sempre que existe um.
+
+**Nomes.** "Alucinação" é uma metáfora ruim — sugere percepção falha, quando o processo é o mesmo que produz as respostas certas. _Confabulação_ descreve melhor. O termo pegou e não vai mudar, mas vale saber o que ele esconde.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que um modelo inventa uma citação acadêmica em vez de dizer que não sabe?',
+      options: [
+        'Porque foi treinado para mentir',
+        'Porque ele gera a continuação mais plausível, e uma citação bem formatada é plausível mesmo quando o artigo não existe',
+        'Porque a temperature está alta',
+        'Porque não tem acesso à internet',
+      ],
+      answer: 1,
+      why: 'Ele aprendeu a forma de uma citação, não o conjunto de citações reais. Quando o fato específico não está memorizado, o formato preenche o espaço — com fluência idêntica à de uma resposta correta.',
+    },
+    {
+      q: 'Qual dessas intervenções reduz alucinação de forma mais confiável?',
+      options: [
+        "Instruir 'não invente nada' no system prompt",
+        'Fornecer o material fonte no contexto e exigir que cada afirmação seja ancorada nele',
+        'Baixar a temperature para 0',
+        'Usar um modelo maior',
+      ],
+      answer: 1,
+      why: 'Colocar o fato certo no contexto muda a distribuição de probabilidade a favor do token correto. Instrução, temperature e tamanho ajudam nas margens; recuperação com ancoragem verificável ataca a causa.',
+    },
+    {
+      q: 'Um modelo responde com muita segurança. O que isso indica sobre a correção da resposta?',
+      options: [
+        'Que provavelmente está certa',
+        'Praticamente nada: o tom assertivo foi aprendido no pós-treino e é independente do acerto',
+        'Que a temperature está baixa',
+        'Que a resposta veio de um documento recuperado',
+      ],
+      answer: 1,
+      why: 'Assertividade é estilo, aprendido porque avaliadores humanos a preferiram. Sinais reais de incerteza vêm dos log-probs ou da divergência entre várias amostragens da mesma pergunta — não do texto.',
+    },
+  ]}
+/>

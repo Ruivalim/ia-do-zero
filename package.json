@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "check": "node scripts/check-content.mjs",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{json,md}\""
   },
   "dependencies": {
     "katex": "^0.16.11",
@@ -23,6 +25,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.0",
+    "prettier": "^3.9.6",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",

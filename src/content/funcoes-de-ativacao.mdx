@@ -1,0 +1,114 @@
+<TLDR>
+  Funções de ativação introduzem não linearidade. Sem elas, várias camadas colapsam em uma única
+  transformação linear e **profundidade não acrescenta poder de representação**.
+
+</TLDR>
+
+<Analogy>
+Imagine uma linha de controles que apenas multiplica e soma o volume de um áudio. Encadear cem desses controles ainda só multiplica e soma: não cria compressão, corte ou distorção.
+
+Uma ativação funciona como um componente que muda o regime do sinal. Depois dela, combinações sucessivas conseguem construir comportamentos que uma única regulagem linear não reproduz.
+
+</Analogy>
+
+## Por que uma dobra é necessária
+
+Cada camada densa faz uma transformação linear seguida de uma ativação. Se retirarmos a ativação, a composição de matrizes e vieses ainda pode ser reescrita como uma matriz e um viés. A rede profunda desenha a mesma classe de fronteira que uma camada.
+
+A não linearidade dobra, recorta ou suaviza o espaço entre camadas. Com muitas unidades, essas pequenas mudanças se combinam em fronteiras complexas e representações hierárquicas.
+
+<Demo id="activations" />
+
+## Sigmoid e tanh
+
+Sigmoid comprime qualquer entrada para o intervalo entre zero e um. Foi natural em redes antigas e continua útil na saída de classificação binária ou em portas. Tanh é centrada em zero e varia entre menos um e um.
+
+Nas pontas, ambas saturam. Entradas muito positivas ou negativas produzem quase a mesma saída mesmo quando mudam. A derivada se aproxima de zero, então o gradiente que atravessa muitas camadas encolhe. Em redes profundas, as primeiras camadas quase deixam de aprender.
+
+## ReLU e seus parentes
+
+ReLU devolve zero no lado negativo e a própria entrada no lado positivo. É barata e mantém derivada constante para ativações positivas. Essa simplicidade ajudou a tornar o treino de redes profundas prático.
+
+O lado negativo cria o neurônio morto. Se uma unidade passa a receber apenas valores negativos, sua saída e seu gradiente ficam zerados; ela pode nunca retornar. Learning rate alta e inicialização ruim aumentam esse risco.
+
+Leaky ReLU preserva uma inclinação pequena no lado negativo. GELU e SiLU fazem transições suaves e modulam a entrada em vez de cortá-la bruscamente. GELU e SiLU são escolhas comuns em Transformers. Não existe vencedora universal: arquitetura, inicialização e custo também importam.
+
+<Callout type="trap">
+  Usar sigmoid em todas as camadas ocultas porque ela é “clássica” recria o problema do gradiente
+  que desaparece. Em uma rede profunda comum, comece com a ativação apropriada à arquitetura; deixe
+  sigmoid para saídas probabilísticas binárias e mecanismos que realmente precisam de uma porta
+  limitada.
+
+</Callout>
+
+## Softmax tem outro papel
+
+Softmax recebe vários logits e os converte em valores positivos que somam um. Na classificação multiclasse, isso forma uma distribuição sobre classes. Em attention, transforma compatibilidades em pesos relativos.
+
+Ela não é a ativação usual de uma camada oculta. Fazer todas as unidades internas competirem por uma soma fixa restringe a representação de uma forma que ReLU, GELU ou SiLU não fazem. A posição mais comum da softmax é a saída de uma decisão categórica.
+
+## Ativação e arquitetura andam juntas
+
+Trocar a ativação sem ajustar a inicialização pode alterar a escala das ativações e dos gradientes a cada camada. Normalização, conexões residuais e formato do bloco também foram desenvolvidos em conjunto com certas ativações. Um teste isolado em uma rede pequena não escolhe automaticamente o melhor componente para outra arquitetura.
+
+<Deep>
+A derivada da sigmoide pode ser escrita como
+
+$$
+\sigma'(x)=\sigma(x)(1-\sigma(x))
+$$
+
+Seu valor máximo é $0{,}25$. No backprop, derivadas de camadas sucessivas se multiplicam. Mesmo antes de considerar os pesos, repetir fatores limitados por esse valor faz o sinal encolher rapidamente. Tanh tem derivada maior perto de zero, mas também satura nas extremidades.
+
+Inicialização busca preservar variância no forward e no backward. Xavier considera a quantidade de entradas e saídas e combina bem com ativações aproximadamente simétricas como tanh. He aumenta a escala para compensar o fato de ReLU zerar parte das ativações. Inicializar sem considerar a função pode explodir ou apagar sinais antes do aprendizado começar.
+
+ReLU produz ativações esparsas porque todas as entradas negativas viram zero. Isso economiza representação efetiva e pode ajudar a separação, mas esparsidade excessiva significa capacidade ociosa. A derivada no ponto zero não é definida; bibliotecas escolhem uma convenção, que raramente importa porque atingir exatamente zero tem medida nula em entradas contínuas.
+
+Blocos Transformer frequentemente usam uma ativação com gate. SwiGLU calcula dois caminhos projetados, aplica SiLU a um deles e multiplica os resultados. Essa interação melhora a capacidade do bloco, mas exige projeções e parâmetros adicionais. Para manter orçamento comparável, a largura intermediária costuma ser ajustada. A escolha não é uma troca gratuita de função.
+
+</Deep>
+
+<Callout type="info">
+  Problemas de treino raramente se resolvem escolhendo uma ativação “mais moderna” sozinha.
+  Inspecione distribuição das ativações, proporção de unidades zeradas, norma dos gradientes e
+  compatibilidade com a inicialização.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que acontece ao empilhar camadas lineares sem ativação?',
+      options: [
+        'A rede aprende qualquer curva',
+        'A composição continua equivalente a uma única transformação linear',
+        'O gradiente sempre explode',
+        'A saída vira uma distribuição',
+      ],
+      answer: 1,
+      why: 'Produtos e somas de transformações lineares podem ser reunidos em outra matriz e outro viés. A profundidade não muda a classe de função.',
+    },
+    {
+      q: 'Por que sigmoid dificulta redes profundas?',
+      options: [
+        'Porque não possui derivada',
+        'Porque satura e transmite derivadas pequenas',
+        'Porque sua saída não tem limite',
+        'Porque só aceita números inteiros',
+      ],
+      answer: 1,
+      why: 'Nas extremidades, mudanças de entrada quase não alteram a saída. O gradiente pequeno se multiplica ao atravessar camadas e desaparece.',
+    },
+    {
+      q: 'Qual é o uso típico de softmax?',
+      options: [
+        'Ativação de todas as camadas ocultas',
+        'Conversão de logits finais em distribuição sobre classes',
+        'Substituição do otimizador',
+        'Padronização de features',
+      ],
+      answer: 1,
+      why: 'Softmax normaliza valores concorrentes para somarem um. Isso combina com uma decisão categórica final, não com representações ocultas gerais.',
+    },
+  ]}
+/>

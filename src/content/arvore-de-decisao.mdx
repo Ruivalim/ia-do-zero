@@ -1,0 +1,120 @@
+<TLDR>
+  Uma árvore de decisão aprende uma sequência de perguntas simples. Cada pergunta divide os dados
+  para deixar os grupos seguintes mais puros, formando **regras legíveis, mas instáveis e fáceis de
+  decorar**.
+
+</TLDR>
+
+<Analogy>
+É o roteiro de uma triagem. A pessoa tem cadastro ativo? Se não, vai para uma fila. Se sim, a compra excede certo valor? Cada resposta abre outra pergunta até chegar a uma decisão.
+
+O roteiro é fácil de seguir. Mas, se você escrever uma exceção para cada pessoa atendida, ele deixa de ser regra e vira uma cópia do histórico.
+
+</Analogy>
+
+## Cortes um de cada vez
+
+Em uma tabela numérica, cada nó escolhe uma feature e um limite. A pergunta divide o espaço com uma linha perpendicular a um eixo. Em categorias, o corte separa valores ou conjuntos de valores conforme a implementação.
+
+O algoritmo avalia candidatos e escolhe aquele que mais reduz impureza. Depois repete o processo em cada ramo. A busca é gulosa: escolhe o melhor corte agora e não volta para trocar o topo porque descobriu uma combinação futura melhor.
+
+<Demo id="decision-tree" />
+
+Essa construção explica a vantagem prática. A árvore não exige escalonamento, pois ordenar uma coluna não muda quando trocamos metros por centímetros. Relações não lineares e interações surgem de regras encadeadas. O caminho até uma folha pode ser lido como uma justificativa local.
+
+## Crescer é fácil, generalizar não
+
+Sem limites, a árvore continua dividindo até deixar poucas amostras por folha, talvez uma só. O treino fica perfeito porque cada exceção ganhou um endereço. Fora dele, pequenas variações atravessam cortes estreitos e recebem outra resposta.
+
+Profundidade máxima limita quantas perguntas um exemplo enfrenta. Mínimo de amostras por folha impede regras sustentadas por poucos casos. Poda por complexidade começa com uma árvore grande e remove ramos cujo ganho não paga o tamanho adicional. Esses freios são regularização e devem ser escolhidos na validação.
+
+Árvores também são instáveis. Trocar poucos exemplos pode mudar o primeiro corte, e toda a estrutura abaixo dele se reorganiza. Isso é ruim para interpretar uma árvore isolada, mas cria diversidade útil para ensembles.
+
+## Muitas árvores
+
+Random Forest treina árvores em amostras reamostradas e oferece a cada corte apenas parte das features. As árvores erram de modos diferentes; a média ou votação reduz variância. O resultado é mais estável, mas perde a leitura de uma única sequência de regras.
+
+Gradient boosting constrói árvores em série. Cada nova árvore corrige os erros residuais do conjunto anterior, com passos pequenos. Isso reduz bias e captura interações complexas com eficiência. Famílias modernas de boosting em árvores continuam sendo uma referência muito forte para dados tabulares estruturados, sobretudo quando há boa engenharia de features e validação cuidadosa.
+
+<Callout type="trap" title="Importância não é causa">
+  A importância de uma feature indica quanto ela ajudou os cortes daquele modelo. Não mostra que
+  intervir nela muda a saída real. A importância padrão baseada em redução de impureza ainda
+  favorece features com muitos valores possíveis, porque elas oferecem mais candidatos de corte.
+  Compare métodos, use permutação em dados separados e preserve a distinção entre previsão e
+  causalidade.
+
+</Callout>
+
+## Limites geométricos
+
+Uma árvore aproxima diagonais e curvas com degraus alinhados aos eixos. Pode precisar de muitos nós para uma fronteira que uma combinação linear representa com poucos coeficientes. Em compensação, encontra naturalmente regras como “se idade está nesta faixa e saldo está naquela”.
+
+Para regressão, cada folha normalmente prevê uma constante, como a média dos alvos ali. Por isso uma árvore não extrapola: fora do intervalo observado, ela continua devolvendo o valor de alguma folha extrema. Se o fenômeno exige projetar uma tendência além dos dados, essa limitação é estrutural.
+
+<Deep>
+Para uma folha com proporções de classe $p_c$, a impureza de Gini é
+
+$$
+G = 1-\sum_c p_c^2
+$$
+
+e a entropia é
+
+$$
+H = -\sum_c p_c\log p_c
+$$
+
+As duas valem zero em folha pura e crescem quando as classes se misturam. Elas têm escalas e curvaturas diferentes, mas em muitos dados ordenam cortes de forma parecida. O ganho de um corte é a impureza do pai menos a média ponderada das impurezas dos filhos.
+
+No treino ingênuo, procurar limites exige ordenar valores ou percorrer colunas já ordenadas em cada nó. Implementações eficientes usam histogramas, estruturas compactas e paralelização. O custo exato depende do algoritmo, mas cresce com exemplos, features avaliadas e profundidade.
+
+Bagging treina estimadores em paralelo sobre amostras perturbadas e faz média. Seu efeito principal é reduzir variância sem aumentar muito o bias. Boosting treina em sequência para corrigir resíduos; reduz bias de modo agressivo, mas pode ajustar ruído se houver árvores profundas, passos grandes ou iterações demais.
+
+A instabilidade afeta explicações. Duas árvores com desempenho equivalente podem contar histórias diferentes. Mesmo em ensembles, valores de importância correlacionados se dividem de forma arbitrária entre features substitutas. Explicação de modelo não resolve identificação causal nem qualidade do dado.
+
+</Deep>
+
+<Callout type="info">
+  Regras legíveis ajudam a discutir o comportamento, mas uma árvore profunda deixa de ser
+  interpretável na prática. Conte folhas, profundidade e estabilidade, não apenas o fato de a
+  arquitetura ter a palavra “decisão”.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Como uma árvore escolhe um corte durante o treino?',
+      options: [
+        'Pelo corte que mais reduz a impureza naquele nó',
+        'Pelo corte causalmente mais importante',
+        'Voltando e testando todas as árvores completas',
+        'Pela feature de maior escala',
+      ],
+      answer: 0,
+      why: 'A construção é gulosa: avalia os cortes disponíveis naquele nó, escolhe o melhor ganho imediato e segue sem revisar toda a árvore.',
+    },
+    {
+      q: 'Por que uma árvore sem poda tende a overfitting?',
+      options: [
+        'Porque não aceita features categóricas',
+        'Porque pode criar folhas para exceções individuais do treino',
+        'Porque exige normalização',
+        'Porque usa apenas relações lineares',
+      ],
+      answer: 1,
+      why: 'Sem freios, a árvore continua criando regras estreitas até memorizar detalhes e ruído da amostra.',
+    },
+    {
+      q: 'Qual diferença central separa Random Forest de gradient boosting?',
+      options: [
+        'Random Forest só faz regressão',
+        'Random Forest combina árvores paralelas; boosting constrói correções em sequência',
+        'Boosting não usa árvores',
+        'Random Forest sempre reduz bias a zero',
+      ],
+      answer: 1,
+      why: 'Bagging cria diversidade e faz média para reduzir variância. Boosting adiciona modelos sequencialmente para corrigir erros anteriores.',
+    },
+  ]}
+/>

@@ -27,7 +27,10 @@ export default function MapPage() {
                 style={{ background: track.hex }}
                 aria-hidden="true"
               />
-              <h2 className="text-sm font-semibold tracking-wide uppercase" style={{ color: track.hex }}>
+              <h2
+                className="text-sm font-semibold tracking-wide uppercase"
+                style={{ color: track.hex }}
+              >
                 {track.n}. {track.title}
               </h2>
               <Link

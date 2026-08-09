@@ -34,9 +34,7 @@ export function Controls({ children, cols = 2 }: { children: ReactNode; cols?: 1
 }
 
 export function Row({ children, wrap = true }: { children: ReactNode; wrap?: boolean }) {
-  return (
-    <div className={cx('flex items-center gap-2', wrap && 'flex-wrap')}>{children}</div>
-  )
+  return <div className={cx('flex items-center gap-2', wrap && 'flex-wrap')}>{children}</div>
 }
 
 export function Panel({
@@ -49,12 +47,7 @@ export function Panel({
   className?: string
 }) {
   return (
-    <div
-      className={cx(
-        'rounded-xl border border-line bg-surface-2/60 p-3',
-        className,
-      )}
-    >
+    <div className={cx('rounded-xl border border-line bg-surface-2/60 p-3', className)}>
       {title && (
         <div className="mb-2 text-[11px] font-semibold tracking-wide text-faint uppercase">
           {title}
@@ -252,16 +245,10 @@ export function Stat({
 }
 
 export function Stats({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">{children}</div>
-  )
+  return <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">{children}</div>
 }
 
-export function Legend({
-  items,
-}: {
-  items: { color: string; label: string; dashed?: boolean }[]
-}) {
+export function Legend({ items }: { items: { color: string; label: string; dashed?: boolean }[] }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted">
       {items.map((it) => (

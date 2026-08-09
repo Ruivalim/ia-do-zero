@@ -1,0 +1,131 @@
+<TLDR>
+  A IA de hoje é poderosa e **limitada de formas específicas**. Nem "é só autocomplete inútil" nem
+  "é quase uma pessoa". Entender os dois lados — o que de fato não faz de forma confiável e o que é
+  genuinamente novo — é o que permite decidir bem.
+
+</TLDR>
+
+<Analogy>
+  É um colega que escreve e resume em velocidade absurda, conhece padrões de um corpus enorme, e às
+  vezes inventa uma citação com a mesma confiança com que acerta a capital de um país. Tratar esse
+  colega como oráculo é imprudente. Tratar como máquina de escrever burra é desperdiçar o que ele já
+  entrega.
+
+</Analogy>
+
+## O que não é confiável (ainda)
+
+Lista sem romance, amarrada ao que o curso mostrou:
+
+- **Garantir verdade factual.** O objetivo de treino é prever token, não consultar uma base de fatos. <Ref to="alucinacao">Alucinação</Ref> é o modo normal quando o palpite fluente está errado.
+- **Saber o que não sabe.** Calibração de incerteza é parcial e falha sob pressão de prompt.
+- **Raciocinar sobre o que não está no contexto** (nem nos pesos de forma utilizável). Fora da <Term id="contexto">janela</Term> e sem ferramenta, o mundo atual não existe.
+- **Aprender de forma permanente com a conversa.** O que você ensina no chat morre com a sessão (salvo memória de produto que **você** implementou). Não há atualização contínua dos pesos a cada mensagem do usuário final.
+- **Agir sozinho.** Ação no mundo exige loop e permissões escritos por alguém — ver <Ref to="agentes">agentes</Ref>.
+
+Isso não anula utilidade. Anula o uso como fonte única de verdade sem verificação.
+
+## Mitos que atrapalham decisão
+
+**"O modelo aprende com as minhas conversas em tempo real."**  
+No sentido de gradiente nos pesos a cada turno: não, no uso típico de API e chat. Pode haver logs e, em produtos separados, memória de longo prazo _como feature_ — engenharia de armazenamento, não mágica de aprendizado online.
+
+**"Temperature 0 torna determinístico."**  
+Reduz aleatoriedade da amostragem. Não elimina, em geral, não determinismo de implementação: paralelismo, batching, kernels. Para reprodutibilidade de eval, fixe o que der e espere resíduo — ver <Ref to="avaliacao">avaliação</Ref> e <Ref to="proximo-token">amostragem</Ref>.
+
+**"Mais parâmetros é sempre melhor."**  
+Ajuda em média na escala, com dados e compute adequados. No produto, modelo menor bem alinhado à tarefa, com <Ref to="rag">RAG</Ref> e eval, muitas vezes ganha de monstro genérico mal integrado. Quantizar e servir também mudam a conta — <Ref to="quantizacao">quantização</Ref>.
+
+**"Ele entende como uma pessoa."**  
+Produz comportamento útil de linguagem. Não implica experiência consciente, intenção estável nem modelo de mundo garantido. Use a metáfora com cuidado; projete sistemas assumindo falhas de coerência e de verdade.
+
+**"A IA vai substituir X."**  
+Pode ser previsão de produto ou de mercado. Não é fato científico do modelo. Trate como hipótese de negócio com cronograma incerto — o histórico de previsões de prazo, nos dois sentidos (cedo demais e tarde demais), é ruim.
+
+## O que é genuinamente novo
+
+Vale reconhecer sem hype:
+
+- **Interface em linguagem natural** para software e para conhecimento engessado em documentos.
+- **Custo marginal baixo** de texto competente (rascunho, variação, tradução, resumo) em escala.
+- **Código como conversa** — com revisão humana ainda obrigatória em produção séria.
+- Composição com **busca, ferramentas e pipelines** que transforma chat em sistema.
+
+O salto não é "o computador pensou". É distribuição massiva de capacidade linguística e de padrão, barata e programável via prompt e tooling.
+
+## Os dois extremos que travam
+
+| Postura             | O que ignora                                              | Efeito prático                                                       |
+| ------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- |
+| "É só autocomplete" | Capacidade real em resumo, código, tradução, orquestração | Subinveste, desenha processo que não usa o que já funciona           |
+| "É quase AGI"       | Modos de falha documentados, limites de verdade e de ação | Superconfia, pula eval, dá ferramenta perigosa, surpresa em produção |
+
+O meio-termo operacional: **competência alta em padrão linguístico + falhas estruturais conhecidas + controles de sistema**.
+
+## Mapa do que você já viu
+
+Se chegou aqui pelo curso, o arsenal mínimo para não se enganar:
+
+- Como o texto vira <Ref to="tokenizacao">token</Ref>, <Ref to="embeddings">embedding</Ref> e <Ref to="self-attention">attention</Ref>.
+- Como se pede (<Ref to="prompting">prompt</Ref>), se fundamenta (<Ref to="rag">RAG</Ref>), se adapta (<Ref to="fine-tuning-e-lora">fine-tuning/LoRA</Ref>) e se age (<Ref to="agentes">agentes</Ref>, <Ref to="mcp">MCP</Ref>).
+- Como se mede (<Ref to="avaliacao">eval</Ref>), se serve barato (<Ref to="quantizacao">quantização</Ref>) e se molda comportamento (<Ref to="rlhf-e-dpo">RLHF/DPO</Ref>, <Ref to="alinhamento">alinhamento</Ref>, <Ref to="vies-e-dados">viés</Ref>).
+
+O próximo passo não é um mito novo. É escolher um problema real, escrever a suite de casos e só então mexer em prompt, recuperação ou pesos.
+
+<Deep>
+**Capacidade "emergente".** A pesquisa relata habilidades que parecem surgir em certa escala. Há crítica séria de que parte disso é artefato da **métrica** (descontínua) e não uma mudança de fase misteriosa. Leia claims de emergência com a pergunta: a curva seria suave com outra medida?
+
+**Contaminação de benchmark.** Suites públicas vazam para dados de treino. Leaderboard alto ≠ produto bom no _seu_ caso. A eval que importa é a que você controla.
+
+**Avaliar sistemas gerais é difícil.** Tarefa aberta, usuários criativos, objetivos múltiplos. Por isso fatias, trajetórias de agente e métricas de negócio entram junto com acurácia de teste fechado.
+
+**Previsões de cronograma.** O campo subestimou e superestimou marcos em épocas diferentes. Use cenários e opções reais (o que construir se a curva continuar, o que construir se estagnar), não uma data messiânica.
+
+**O contrato deste curso.** Tudo que você viu roda na ideia de modelos estatísticos, engenharia de contexto e sistemas em volta. O limite de hoje não é argumento para imobilidade; é especificação de onde colocar verificação humana e enforcement de verdade.
+
+</Deep>
+
+<Callout type="trap">
+  Os dois extremos. "É só autocomplete" ignora capacidade real; "é quase AGI" ignora modos de falha
+  documentados. Ambos impedem decidir bem — o primeiro por cinismo preguiçoso, o segundo por fé
+  operacional.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que temperature 0 não garante reprodutibilidade total?',
+      options: [
+        'Porque temperature 0 na verdade maximiza aleatoriedade',
+        'Porque ainda pode haver não determinismo numérico e de infraestrutura além da amostragem',
+        'Porque o modelo desliga',
+        'Porque o vocabulário muda a cada chamada',
+      ],
+      answer: 1,
+      why: 'Amostragem determinística não elimina diferenças de kernel, batching e aritmética. Eval séria trata ruído residual.',
+    },
+    {
+      q: 'O modelo aprende de forma permanente com cada conversa do usuário final?',
+      options: [
+        'Sim, os pesos atualizam a cada mensagem',
+        'Não no uso típico: a janela e o estado da sessão somem; memória longa é feature de produto, não treino online automático',
+        'Sim, via quantização',
+        'Só se a temperature for 1',
+      ],
+      answer: 1,
+      why: 'Inferência não é treino. Persistência exige engenharia explícita (memória, fine-tuning offline, etc.).',
+    },
+    {
+      q: 'Qual postura o texto recomenda diante de LLMs em produto?',
+      options: [
+        'Tratar como oráculo sem verificação',
+        "Ignorar por ser 'só autocomplete'",
+        'Usar a capacidade linguística com eval, verificação e limites de sistema, sem os dois extremos',
+        'Só usar após prova de consciência artificial',
+      ],
+      answer: 2,
+      why: 'Utilidade real existe; falhas estruturais também. Engenharia é casar os dois com medição e controle.',
+    },
+  ]}
+/>

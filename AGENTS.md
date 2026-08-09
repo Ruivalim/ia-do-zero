@@ -22,7 +22,7 @@ Leia este arquivo inteiro antes de escrever qualquer linha.
 6. **Determinístico.** Se precisar de aleatório, use `rng(seed)` de `src/lib/mathx.ts`.
    Nunca `Math.random()` direto — o demo tem que abrir igual toda vez.
 7. **Português do Brasil** em todo texto visível. Termo técnico consagrado fica em inglês
-   (*token*, *embedding*, *learning rate*, *overfitting*, *attention*). Não traduza esses.
+   (_token_, _embedding_, _learning rate_, _overfitting_, _attention_). Não traduza esses.
 8. **Não edite** `src/lib/*`, `src/components/ui.tsx`, `src/components/content.tsx`,
    `src/demos/registry.ts`, nem arquivos de outro agente. Só crie os arquivos que te pedirem.
 9. Sem emoji em código. Sem comentário narrando o óbvio.
@@ -114,7 +114,9 @@ export default function AlgumaCoisaDemo() {
   return (
     <div className="flex flex-col gap-4">
       <Row>{/* botões e presets */}</Row>
-      <Plot w={W} h={H} aria-label="descrição do que o gráfico mostra">…</Plot>
+      <Plot w={W} h={H} aria-label="descrição do que o gráfico mostra">
+        …
+      </Plot>
       <Controls>{/* sliders */}</Controls>
       <Stats>{/* números que mudam ao vivo */}</Stats>
       <Caption>O que o leitor deve reparar aqui.</Caption>
@@ -130,7 +132,7 @@ Regras de conteúdo do demo:
 - O `<Caption>` final aponta o que reparar, incluindo o caso em que dá errado.
 - Estado inicial já interessante: o leitor não deve precisar mexer pra ver algo.
 - Alvo de toque no mínimo 32×32 px. Nada que dependa de hover para funcionar
-  (hover pode *acrescentar*, nunca ser o único caminho).
+  (hover pode _acrescentar_, nunca ser o único caminho).
 - Anime com `useRaf` ou `useInterval`, sempre com um botão de pausar.
 - Tamanho: 90 a 200 linhas. Se passar muito disso, o demo está fazendo demais.
 
@@ -154,23 +156,30 @@ Arquivo: `src/content/<slug>.mdx`. Os componentes abaixo estão disponíveis **s
 Prosa. `<Term id="chave">palavra</Term>` faz tooltip do glossário.
 `<Ref to="slug">link</Ref>` liga a outro capítulo.
 
-<Steps items={[["Título", "explicação"], ["Título", "explicação"]]} />
+<Steps
+  items={[
+    ['Título', 'explicação'],
+    ['Título', 'explicação'],
+  ]}
+/>
 
 <Demo id="id-do-demo" />
 
-<Versus left="A" right="B" rows={[["aspecto","lado A","lado B"]]} />
+<Versus left="A" right="B" rows={[['aspecto', 'lado A', 'lado B']]} />
 
 <Callout type="trap">A confusão que quase todo mundo faz.</Callout>
 <Callout type="warn|info|ok">…</Callout>
 
 <Deep>
-Camada técnica: matemática em `$…$` e `$$…$$` (KaTeX), custo, detalhe de implementação.
-Fica fechada no modo "Simples" e aberta no modo "Técnico".
+  Camada técnica: matemática em `$…$` e `$$…$$` (KaTeX), custo, detalhe de implementação. Fica
+  fechada no modo "Simples" e aberta no modo "Técnico".
 </Deep>
 
-<Quiz questions={[
-  { q: "…", options: ["…","…","…","…"], answer: 1, why: "Por que essa e não as outras." }
-]} />
+<Quiz
+  questions={[
+    { q: '…', options: ['…', '…', '…', '…'], answer: 1, why: 'Por que essa e não as outras.' },
+  ]}
+/>
 ```
 
 Estrutura obrigatória de toda página, nesta ordem:

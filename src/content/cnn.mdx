@@ -1,0 +1,113 @@
+<TLDR>
+  Uma CNN aplica o mesmo filtro pequeno em todas as posições da imagem. Isso compartilha pesos,
+  preserva estrutura espacial e permite aprender **features locais que se combinam em objetos**.
+
+</TLDR>
+
+<Analogy>
+Você procura rachaduras passando uma pequena moldura sobre uma parede. O critério para reconhecer uma borda é o mesmo no canto e no centro; não precisa aprender um detector novo para cada pedaço.
+
+Depois, combina bordas próximas em cantos, cantos em formas e formas em estruturas maiores. A moldura local vira uma visão ampla quando etapas se acumulam.
+
+</Analogy>
+
+## Um filtro que desliza
+
+Uma convolução olha para uma janela pequena, multiplica seus valores por um kernel e soma. O kernel se desloca pela altura e largura, produzindo um mapa de ativação. Cada canal de saída aprende um filtro diferente.
+
+Compartilhar o kernel reduz parâmetros e embute uma hipótese: o mesmo padrão pode importar em qualquer posição. Uma camada densa trataria cada pixel como uma feature separada e precisaria reaprender “borda” para cada lugar. Em uma imagem comum, isso cria uma quantidade impraticável de conexões e ignora a vizinhança natural.
+
+<Demo id="convolution" />
+
+No demo, filtros diferentes respondem a estruturas diferentes. Esses valores não são regras programadas. Durante o treino, o gradiente ajusta kernels para produzir features que ajudam a perda final.
+
+## Da borda ao objeto
+
+As primeiras camadas veem regiões pequenas e costumam aprender contrastes, orientações e texturas. Camadas seguintes recebem esses mapas e combinam padrões em partes maiores. Perto da saída, uma unidade integra informação de uma área ampla da imagem.
+
+Essa hierarquia é emergente. Ninguém escreve um kernel “olho” ou “roda”. O objetivo supervisionado favorece combinações úteis. A descrição borda-textura-parte-objeto é uma boa intuição geral, não um dicionário garantido para cada canal.
+
+Stride maior avança o filtro em saltos e reduz a resolução. Pooling resume vizinhanças por máximo ou média. As duas operações diminuem custo e ampliam o campo receptivo efetivo das camadas seguintes, mas descartam localização fina. Algumas arquiteturas preferem convoluções com stride aprendido em vez de pooling fixo.
+
+## A invariância é limitada
+
+Se um padrão se desloca, o mesmo kernel tende a responder em outra posição. Isso é equivariância à translação. Depois de reduzir e agregar posições, a decisão pode ficar aproximadamente invariante a pequenos deslocamentos.
+
+Rotacionar ou redimensionar muda a relação dos pixels com o filtro. Uma CNN comum não nasce invariante a rotação e escala. Data augmentation ensina essas variações ao apresentar recortes, giros e mudanças compatíveis com o rótulo. Arquiteturas específicas podem incorporar outras simetrias, mas não são consequência automática da convolução.
+
+<Callout type="trap">
+  Dizer que CNN “reconhece em qualquer orientação e tamanho” confunde translação com transformações
+  diferentes. Sem exemplos, augmentations ou estrutura própria, um filtro aprendido para uma borda
+  horizontal não precisa responder à mesma borda girada.
+
+</Callout>
+
+## Onde CNNs continuam úteis
+
+Vision Transformers oferecem flexibilidade e aproveitam escala grande de dados e compute. Isso não tornou convoluções obsoletas. CNNs têm uma hipótese de localidade forte, bom reaproveitamento de pesos e implementações eficientes.
+
+Elas continuam adequadas em dispositivos com orçamento restrito, sistemas de tempo real e muitas tarefas de imagem médica, industrial ou científica. Em datasets menores, a estrutura embutida pode reduzir a quantidade de padrão espacial que o modelo precisa descobrir sozinho.
+
+Muitos sistemas modernos também são híbridos. Convoluções extraem mapas locais; attention integra relações distantes. A escolha depende de latência, memória, dados e resolução, não de uma disputa abstrata entre famílias.
+
+<Deep>
+Uma camada com kernel de altura $k_h$, largura $k_w$, $c_{in}$ canais de entrada e $c_{out}$ canais de saída tem
+
+$$
+k_h k_w c_{in}c_{out}+c_{out}
+$$
+
+parâmetros com viés. A contagem não depende da altura ou largura da imagem. O custo de execução depende, pois o kernel é aplicado em todas as posições de saída.
+
+O campo receptivo acumula ao longo das camadas. Uma unidade que vê uma janela pequena de um mapa já resume uma região maior da entrada. Stride aumenta os saltos entre posições correspondentes; dilatação espaça elementos do kernel e amplia cobertura sem aumentar a quantidade de pesos.
+
+Convolução de tamanho unitário mistura canais em cada posição sem olhar vizinhos. Ela projeta a dimensão, cria gargalos e combina detectores locais. Convolução separável em profundidade primeiro aplica um filtro espacial por canal e depois mistura canais com uma convolução unitária. Isso reduz fortemente multiplicações e parâmetros, razão de seu uso em modelos móveis.
+
+Batch normalization calcula estatísticas por canal sobre lote e posições espaciais, depois aplica escala e deslocamento aprendidos. Ela estabiliza muitas CNNs, mas lotes pequenos produzem estatísticas ruidosas. Na inferência, usa médias acumuladas; esquecer a troca entre modos de treino e avaliação causa resultados inconsistentes.
+
+</Deep>
+
+<Callout type="info">
+  Visualizar filtros iniciais é simples; explicar uma decisão final por um único mapa não é.
+  Features profundas são distribuídas e podem responder a atalhos do dataset. Teste o modelo com
+  oclusões, mudanças de fundo e recortes controlados.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a principal economia de uma convolução em relação a uma camada densa na imagem?',
+      options: [
+        'Usar o mesmo filtro em todas as posições',
+        'Eliminar todas as ativações',
+        'Processar apenas um pixel',
+        'Não precisar de treino',
+      ],
+      answer: 0,
+      why: 'Compartilhamento de pesos permite detectar o mesmo padrão local em qualquer posição sem aprender conexões separadas para cada pixel.',
+    },
+    {
+      q: 'O que stride ou pooling fazem?',
+      options: [
+        'Aumentam a resolução indefinidamente',
+        'Reduzem resolução e ajudam a ampliar o campo receptivo',
+        'Garantem invariância a rotação',
+        'Transformam imagem em rótulo sem perda',
+      ],
+      answer: 1,
+      why: 'Ambos resumem ou saltam posições, diminuindo o mapa e fazendo camadas posteriores integrarem regiões maiores da entrada.',
+    },
+    {
+      q: 'Uma CNN comum é automaticamente invariante a quê?',
+      options: [
+        'A qualquer rotação e escala',
+        'A mudanças completas de iluminação',
+        'Aproximadamente a pequenos deslocamentos, após agregação',
+        'A troca arbitrária de pixels',
+      ],
+      answer: 2,
+      why: 'O mesmo kernel responde quando o padrão se desloca. Rotação e escala mudam a geometria e precisam ser aprendidas ou incorporadas separadamente.',
+    },
+  ]}
+/>

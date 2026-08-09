@@ -24,12 +24,58 @@ model models data token tokens layer layers train training learn learning
   .split(/\s+/)
 
 const SUFFIXES = [
-  'ção','ções','mente','ando','endo','indo','ável','ível','idade','agem','ismo','ista',
-  'ador','adores','ência','ância','inho','inha','zinho','ário','oso','osa','eiro','eira',
-  'ing','tion','tions','ness','ment','ally','ed','er','ers','est','ly','s',
+  'ção',
+  'ções',
+  'mente',
+  'ando',
+  'endo',
+  'indo',
+  'ável',
+  'ível',
+  'idade',
+  'agem',
+  'ismo',
+  'ista',
+  'ador',
+  'adores',
+  'ência',
+  'ância',
+  'inho',
+  'inha',
+  'zinho',
+  'ário',
+  'oso',
+  'osa',
+  'eiro',
+  'eira',
+  'ing',
+  'tion',
+  'tions',
+  'ness',
+  'ment',
+  'ally',
+  'ed',
+  'er',
+  'ers',
+  'est',
+  'ly',
+  's',
 ]
 
-const PREFIXES = ['des', 'in', 'im', 're', 'pre', 'pré', 'pro', 'sub', 'super', 'multi', 'auto', 'inter']
+const PREFIXES = [
+  'des',
+  'in',
+  'im',
+  're',
+  'pre',
+  'pré',
+  'pro',
+  'sub',
+  'super',
+  'multi',
+  'auto',
+  'inter',
+]
 
 const PUNCT = [...'.,;:!?()[]{}"\'`-–—/\\|@#$%&*+=<>~^', '...', '?!', '\n', '\n\n']
 
@@ -77,8 +123,7 @@ function tokenize(input: string): Tok[] {
       const raw = input.slice(start, start + matched.length)
       const key = (spaced ? '␣' : '') + matched
       const whole =
-        COMMON.includes(matched) &&
-        !/[a-z0-9]/i.test(input[start + matched.length] ?? '')
+        COMMON.includes(matched) && !/[a-z0-9]/i.test(input[start + matched.length] ?? '')
       out.push({
         text: (spaced ? ' ' : '') + raw,
         id: ID_OF.get(key) ?? 0,
@@ -187,8 +232,8 @@ export default function TokenizerDemo() {
       <Caption>
         Este é um tokenizador de brinquedo com ~{VOCAB_SET.size} peças, não o vocabulário real de
         nenhum modelo (esses têm 50 mil a 200 mil). Mas o comportamento é o mesmo: palavra comum
-        vira um token só, palavra rara vira vários, e o que não está no vocabulário desce a nível
-        de byte — por isso um emoji custa três ou quatro tokens sozinho.
+        vira um token só, palavra rara vira vários, e o que não está no vocabulário desce a nível de
+        byte — por isso um emoji custa três ou quatro tokens sozinho.
       </Caption>
     </div>
   )

@@ -1,0 +1,130 @@
+<TLDR>
+  Um Transformer é **um bloco repetido dezenas de vezes**. Cada bloco faz duas coisas: os tokens
+  trocam informação entre si (attention) e depois cada token pensa sozinho (uma MLP). Só isso,
+  empilhado, é o GPT inteiro.
+
+</TLDR>
+
+<Analogy>
+Uma redação passando por uma fila de revisores idênticos.
+
+Cada revisor faz duas passadas. Primeiro ele deixa as frases conversarem: cada trecho consulta os outros e absorve o contexto que faltava. Depois ele reescreve cada trecho individualmente, com base no que aquele trecho agora sabe.
+
+O texto sai da mesa e vai para o próximo revisor, que faz exatamente as mesmas duas passadas. Depois de oitenta revisores, o que era uma sequência de palavras soltas virou uma representação em que cada posição carrega o sentido da frase inteira.
+
+</Analogy>
+
+<Demo id="transformer-blocks" />
+
+## O que tem dentro de um bloco
+
+Quatro peças, sempre na mesma ordem:
+
+<Steps
+  items={[
+    [
+      'LayerNorm',
+      'Normaliza os valores antes de cada sub-camada. Mantém as ativações numa escala estável, o que é o que torna possível empilhar dezenas de camadas sem o treino explodir.',
+    ],
+    [
+      'Multi-head attention',
+      'Os tokens trocam informação. É o único lugar do modelo onde uma posição olha para outra.',
+    ],
+    [
+      'MLP (feed-forward)',
+      'Cada token, isolado dos outros, passa por duas camadas densas: expande para 4× a dimensão, aplica uma ativação, e volta. É onde mora a maior parte dos parâmetros.',
+    ],
+    [
+      'Conexões residuais',
+      'A entrada de cada sub-camada é somada à saída dela. O bloco aprende uma correção, não uma substituição.',
+    ],
+  ]}
+/>
+
+As conexões residuais merecem atenção. Sem elas, treinar 80 camadas seria impossível: o gradiente se perderia no caminho de volta. Com elas existe uma "estrada" que atravessa o modelo inteiro, e cada bloco só precisa aprender o que acrescentar. É o mesmo truque que fez as ResNets funcionarem em visão.
+
+Uma imagem que ajuda: o vetor de um token é um bloco de notas que atravessa o modelo. Cada camada lê o bloco, escreve mais alguma coisa nele, e passa adiante.
+
+## O caminho completo de um prompt
+
+1. O texto é <Ref to="tokenizacao">tokenizado</Ref>.
+2. Cada token vira um vetor pela tabela de <Ref to="embeddings">embeddings</Ref>.
+3. Informação de posição é acrescentada — sem isso o modelo não distingue "o cão mordeu o homem" de "o homem mordeu o cão".
+4. Os vetores atravessam N blocos idênticos em estrutura, todos com pesos próprios.
+5. O vetor da última posição passa por uma projeção final para o tamanho do vocabulário, produzindo um <Term id="softmax">logit</Term> por token possível.
+6. Softmax transforma isso em probabilidades, e a <Ref to="proximo-token">estratégia de amostragem</Ref> escolhe um.
+7. O token escolhido entra no fim da sequência e tudo recomeça.
+
+Repare que a única saída do modelo é uma distribuição de probabilidade sobre o próximo token. Toda a conversa, o código, o raciocínio — tudo emerge de repetir esse passo.
+
+<Callout type="info" title="Encoder, decoder, ou os dois">
+O artigo original de 2017 tinha duas metades: um encoder que lê a frase inteira e um decoder que escreve a tradução. Hoje as três famílias coexistem:
+
+- **Só decoder** (GPT, Llama, Claude): gera texto, usa máscara causal. É a arquitetura dominante.
+- **Só encoder** (BERT): lê o texto inteiro de uma vez sem máscara, produz representações. Ótimo para classificação e para gerar <Ref to="embeddings">embeddings</Ref>.
+- **Encoder-decoder** (T5): entrada e saída separadas. Sobrevive em tradução e em algumas tarefas de seq2seq.
+
+</Callout>
+
+<Callout type="trap">
+  "Mais camadas = modelo melhor" é uma simplificação perigosa. Profundidade, largura ($d_{model}$),
+  número de cabeças e quantidade de dados de treino precisam crescer de forma equilibrada. Um modelo
+  muito profundo e estreito treina mal; um modelo grande treinado com poucos tokens desperdiça
+  capacidade — que é exatamente a lição das <Ref to="leis-de-escala">leis de escala</Ref>.
+
+</Callout>
+
+<Deep>
+Números e detalhes que aparecem quando você mexe de verdade:
+
+**Contagem de parâmetros por bloco.** Com dimensão $d$: attention usa quatro matrizes $d \times d$ (Q, K, V e a projeção de saída), ou seja $4d^2$. A MLP usa $d \times 4d$ e $4d \times d$, ou seja $8d^2$. Total $\approx 12d^2$ por bloco, sem contar normalizações e vieses. Para $d = 4096$ isso dá cerca de 200 milhões de parâmetros por bloco — multiplique pelo número de camadas.
+
+Repare na proporção: **dois terços dos parâmetros estão na MLP**, não na attention. Trabalhos de interpretabilidade sugerem que as MLPs funcionam como memória associativa de fatos, enquanto a attention move informação. É a intuição por trás de editar fatos mexendo em camadas específicas de MLP.
+
+**Pre-norm × post-norm.** O artigo original normalizava depois da sub-camada. Modelos atuais normalizam antes (pre-norm), porque o caminho residual fica limpo e o treino é bem mais estável em profundidade. RMSNorm substituiu LayerNorm em boa parte dos modelos recentes: dispensa a média e é mais barato, com qualidade equivalente.
+
+**Variantes de ativação na MLP.** ReLU deu lugar a GELU e depois a SwiGLU, que usa uma porta multiplicativa e três matrizes em vez de duas. Como isso aumenta os parâmetros, costuma-se reduzir o fator de expansão de 4 para cerca de 8/3 para manter a conta.
+
+**Posição.** Codificação senoidal absoluta (2017) foi substituída por RoPE, que rotaciona Q e K por um ângulo dependente da posição. Isso torna o produto interno função da distância relativa entre tokens, e permite esticar o contexto além do treinado com interpolação — a base de quase todo "modelo com 1 milhão de tokens de janela".
+
+**Onde o tempo vai.** No pré-preenchimento do prompt, o gargalo é compute (matmuls grandes, GPU saturada). Na geração token a token, o gargalo é banda de memória: para cada token novo é preciso ler todos os pesos do modelo da memória. Por isso a geração é lenta mesmo em GPU potente, e por isso <Ref to="quantizacao">quantização</Ref> acelera tanto — menos bytes para ler.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a função das conexões residuais no Transformer?',
+      options: [
+        'Reduzir o número de parâmetros',
+        'Criar um caminho direto para o gradiente, permitindo empilhar dezenas de camadas',
+        'Acelerar a inferência',
+        'Substituir a normalização',
+      ],
+      answer: 1,
+      why: 'Sem residuais, o gradiente se degrada ao atravessar muitas camadas. Com elas há uma estrada que percorre o modelo inteiro e cada bloco só precisa aprender uma correção.',
+    },
+    {
+      q: 'Onde está a maior parte dos parâmetros de um Transformer?',
+      options: [
+        'Na attention',
+        'Nas camadas MLP de cada bloco',
+        'Na tabela de embeddings',
+        'Nas normalizações',
+      ],
+      answer: 1,
+      why: 'Por bloco, a attention usa cerca de 4d² e a MLP cerca de 8d². Dois terços do modelo é MLP — o que também é onde a interpretabilidade encontra armazenamento de fatos.',
+    },
+    {
+      q: 'Por que é preciso acrescentar informação de posição aos embeddings?',
+      options: [
+        'Para economizar memória',
+        'Porque a attention por si só não distingue a ordem dos tokens',
+        'Para permitir o uso de GPUs',
+        'Porque o tokenizador perde a ordem',
+      ],
+      answer: 1,
+      why: 'A operação de attention é equivariante a permutação: embaralhar os tokens embaralha a saída sem mudá-la. Toda noção de ordem entra por fora, via codificação posicional ou RoPE.',
+    },
+  ]}
+/>

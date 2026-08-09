@@ -1,0 +1,126 @@
+<TLDR>
+  O modelo pré-treinado prevê o próximo token; ele **não** nasce sabendo se comportar. RLHF e DPO
+  usam preferências humanas ("A é melhor que B") para ensinar formato, tom, recusa e seguir
+  instrução — não para implantar fatos novos.
+
+</TLDR>
+
+<Analogy>
+  É a diferença entre alguém que leu a internet inteira e alguém que passou por um treinamento de
+  atendimento. O primeiro sabe muita coisa e responde de qualquer jeito. O segundo foi corrigido mil
+  vezes: "assim não, assim sim". Ninguém no treinamento ensinou a capital de um país novo de forma
+  confiável — ensinou **como** falar e o que não fazer.
+
+</Analogy>
+
+## O buraco que a supervisão clássica não tapa
+
+Em classificação, existe rótulo certo. Em "escreva um e-mail empático e seguro", existem **muitas** respostas aceitáveis e um mar de inaceitáveis. Supervisionar com uma única demonstração por prompt ajuda (é o SFT), mas não cobre o espaço de preferências: entre duas respostas boas, qual o time prefere? Entre uma correta e grossa e uma educada e vaga, o que priorizar?
+
+Preferência em pares ataca isso: avaliadores (ou proxies) escolhem A vs B. Esse sinal vira gradiente.
+
+## RLHF em três atos
+
+**<Term id="rlhf">RLHF</Term>** (_Reinforcement Learning from Human Feedback_) costuma empilhar:
+
+<Steps
+  items={[
+    [
+      'SFT',
+      'Fine-tuning supervisionado em demonstrações: ensina o formato de assistente e as tarefas básicas.',
+    ],
+    [
+      'Modelo de recompensa',
+      'Treina-se um modelo que, dado prompt + resposta, prevê um score alinhado às preferências humanas (pares A≻B).',
+    ],
+    [
+      'Otimização da política',
+      'O LLM (política) gera respostas; o reward model pontua; um algoritmo de RL (classicamente PPO) atualiza a política com penalidade de KL contra um modelo de referência.',
+    ],
+  ]}
+/>
+
+A penalidade de KL existe para o modelo não se afastar demais do SFT/referência só para maximizar o score — senão ele explora loopholes do reward model.
+
+## DPO: sem reward model no meio
+
+**<Term id="dpo">DPO</Term>** (_Direct Preference Optimization_) reformula o problema: com pares de preferência, dá para otimizar a política **direto**, sem treinar um reward model separado e sem o loop de RL instável. Mais simples de implementar e, na prática de muitos times, mais estável. Virou padrão em grande parte dos pipelines abertos e internos.
+
+A intuição: aumentar a probabilidade relativa da resposta preferida frente à rejeitada, ainda ancorado num modelo de referência (de novo, o espírito da KL).
+
+<Demo id="preference-training" />
+
+## O que o pós-treino muda de verdade
+
+- Seguir instrução e formato de diálogo.
+- Tom, concisão, estrutura.
+- Recusas e limites de política (imperfeitos).
+- Calibração superficial ("quando admitir incerteza") — também imperfeita.
+
+O que **não** faz com confiabilidade: injetar conhecimento factual novo e estável. Isso continua sendo pré-treino, <Ref to="rag">RAG</Ref> ou ferramenta. Ver também <Ref to="pretreino-e-postreino">pré-treino e pós-treino</Ref>.
+
+## Bajulação não é personalidade
+
+Se os avaliadores — ou o proxy de preferência — premiam respostas longas, concordantes e elogiosas, o treino **maximiza isso**. O modelo vira bajulador não por "ter ego", e sim porque essa política pontuava mais. Preferência mal especificada vira comportamento de produto.
+
+O mesmo vale para recusas excessivas ou insuficientes: o modelo aprende o que foi recompensado no dataset de preferência, com todos os vieses e a fadiga dos anotadores.
+
+Por isso o trabalho de **especificar** o que conta como melhor resposta — guia de anotação, exemplos âncora, critérios de desempate — pesa tanto quanto escolher DPO ou PPO. Time cansado marca o mais longo; modelo aprende a enrolar. Time pune qualquer risco; modelo recusa o legítimo. <Ref to="alinhamento">Alinhamento</Ref> de produto começa na rubrica humana, não só no algoritmo.
+
+<Deep>
+**Goodhart e overoptimization.** Quando a métrica vira alvo, deixa de ser boa métrica. O reward model é uma proxy; otimizar agressivo demais produz respostas que o RM adora e humanos não — texto inchado, padrões estranhos, sycophancy. KL e early stopping são freios; eval humana periódica é o chão.
+
+**RLAIF e constitutional.** Em vez de humano em todo par, usa-se IA com princípios escritos (constituição) para rotular preferências. Escala melhor; herda vieses do modelo juiz e do texto dos princípios.
+
+**Anotação é cara e ruidosa.** Concordância entre anotadores em tarefas subjetivas é limitada. Instruções ambíguas geram dataset que ensina ruído. Boas guias, exemplos âncora e medição de acordo inter-anotador importam tanto quanto o algoritmo.
+
+**SFT ainda importa.** DPO/RLHF em cima de base sem SFT decente costuma ser pior. Demonstrações limpam o espaço; preferências refinam.
+
+**Relação com LoRA.** Dá para fazer preference tuning com adaptadores — ver <Ref to="fine-tuning-e-lora">fine-tuning e LoRA</Ref> — e servir variantes de política sem duplicar a base inteira.
+
+</Deep>
+
+<Callout type="trap">
+  Achar que bajulação, verbosidade ou recusa paranoica são "defeitos de personalidade" do modelo.
+  São **resultados de treino**: o sistema aprendeu o que os avaliadores (ou o proxy) premiaram. Mude
+  o sinal de preferência e a eval — não implore no prompt como única correção.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é o papel do modelo de recompensa no RLHF clássico?',
+      options: [
+        'Tokenizar o texto de entrada',
+        'Pontuar respostas de forma alinhada a preferências humanas, guiando o RL',
+        'Substituir o pré-treino',
+        'Comprimir o KV cache',
+      ],
+      answer: 1,
+      why: 'O RM traduz preferências em score. A política otimiza esse score (com freio de KL), em vez de um rótulo único por token.',
+    },
+    {
+      q: 'O que o DPO elimina no pipeline típico?',
+      options: [
+        'A necessidade de qualquer dado humano',
+        'O reward model separado e o loop de RL, otimizando a política direto nos pares',
+        'O SFT',
+        'A janela de contexto',
+      ],
+      answer: 1,
+      why: 'DPO reparametriza o objetivo de preferência para treino direto da política, com referência — em geral mais simples e estável.',
+    },
+    {
+      q: 'Pós-treino por preferência é a ferramenta certa para o modelo memorizar o manual interno da empresa?',
+      options: [
+        'Sim, RLHF existe para fatos corporativos',
+        'Não: isso é trabalho de recuperação/ferramenta; preferência molda comportamento',
+        'Sim, com PPO e KL zero',
+        'Só com constitutional AI',
+      ],
+      answer: 1,
+      why: "Preferência ensina o que é 'melhor resposta' em estilo e política. Fato mutável e documentado pede RAG ou sistema de registro.",
+    },
+  ]}
+/>

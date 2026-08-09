@@ -1,0 +1,111 @@
+<TLDR>
+  Fine-tuning ensina **comportamento e formato**, não fatos da sua empresa. A ordem certa de tentar
+  é prompt → few-shot → RAG → fine-tuning. LoRA torna o treino barato ao ajustar só matrizes finas
+  ao lado dos pesos congelados.
+
+</TLDR>
+
+<Analogy>
+  É a diferença entre colar um post-it na mesa do funcionário e mandá-lo de novo para um curso de
+  três meses. O post-it (prompt, few-shot, RAG) resolve a tarefa de hoje com o conhecimento que ele
+  já tem. O curso (fine-tuning) muda **como** ele responde de forma estável — tom, estrutura, o que
+  recusar — mas não substitui a pasta de documentos da empresa na gaveta.
+
+</Analogy>
+
+## A escada, não o atalho
+
+Antes de abrir uma GPU, percorra a escada:
+
+1. **Prompt** claro e estruturado.
+2. **Few-shot** se o formato oscila.
+3. **<Ref to="rag">RAG</Ref>** se o problema é fato externo ou documento mutável.
+4. **<Term id="fine-tuning">Fine-tuning</Term>** só quando o comportamento ainda não fecha — e você tem dados de demonstração de qualidade.
+
+Fine-tuning é o último recurso barato de **engenharia de produto**, não o primeiro reflexo de "vamos ensinar o modelo a nossa empresa". Documento muda toda semana; peso treinado não.
+
+## O que o fine-tuning realmente ensina
+
+Bom para: formato rígido de saída, tom de marca, seguir um protocolo, recusar classes de pedido, especializar jargão de domínio no **estilo** da resposta.
+
+Ruim para: "decorar" a wiki. Fatos novos no treino competem com o pré-treino, ficam datados e falham de forma opaca. Fato da empresa é trabalho de <Term id="rag">RAG</Term> (ou de ferramenta que consulta a fonte da verdade).
+
+O custo real quase nunca é a GPU. É **curadoria**: pares de entrada e saída boas, cobertura dos casos feios, revisão humana. Algumas centenas de exemplos excelentes batem dezenas de milhares ruins e ruidosos.
+
+<Demo id="lora" />
+
+## LoRA: treinar pouco, servir flexível
+
+Treinar todos os <Term id="parametro">parâmetros</Term> de um LLM grande é caro em memória do otimizador e em risco de estragar o que já funciona. **<Term id="lora">LoRA</Term>** (Low-Rank Adaptation) congela a matriz original $W$ e treina duas matrizes finas $A$ e $B$ tais que a atualização é $BA$ (ou $AB$, conforme a convenção), com rank $r$ pequeno.
+
+Intuição: a correção que você precisa para um domínio costuma viver num subespaço de dimensão baixa. Em vez de mover $d \times d$ pesos, você move $d \times r$ e $r \times d$.
+
+Consequências práticas:
+
+- O otimizador só guarda estado para os parâmetros treináveis → cabe em hardware bem menor.
+- O adaptador é um arquivo pequeno, trocável e **reversível**: tire o LoRA e a base volta.
+- **QLoRA** combina isso com o modelo base em poucos bits (quantização agressiva na base, adaptadores em precisão maior), barateando ainda mais.
+
+## Esquecimento e o risco do domínio estreito
+
+Treinar demais num recorte estreito degrada o resto: o modelo fica ótimo no seu template e pior em conversa geral, em idiomas menos vistos no seu dataset, em recusas que o pós-treino original cuidava. Isso é esquecimento catastrófico na prática de produto — mesmo com LoRA, se o rank e as épocas forem agressivos e o dado for monótono.
+
+Monitore tarefas **fora** do seu domínio de treino, não só a métrica do dataset interno.
+
+<Deep>
+**Rank e alpha.** O rank $r$ controla a capacidade do adaptador. Alpha (ou o fator de escala $\alpha/r$) regula a magnitude da atualização. Rank alto demais aproxima full fine-tuning em custo e em risco; rank baixo demais não cabem os padrões do dataset. Ajuste com eval, não com fé.
+
+**Onde aplicar.** O padrão comum é nas projeções de <Term id="attention">attention</Term> (Q, K, V, O); incluir MLP às vezes ajuda em adaptação de estilo. Aplicar em tudo aumenta parâmetros treináveis sem garantia de ganho.
+
+**Mesclar para servir.** Na inferência você pode somar $W' = W + BA$ e descartar o adaptador separado — zero overhead de latência, um peso por variante. Alternativa: manter a base única e carregar muitos adaptadores (um por cliente/tarefa), trocando qual está ativo.
+
+**Preference tuning.** SFT (demonstrações) e treino por preferência (<Ref to="rlhf-e-dpo">DPO/RLHF</Ref>) são etapas diferentes. LoRA aparece nas duas; o dado e a loss mudam.
+
+**Quando full fine-tuning ainda aparece.** Modelos menores, mudanças profundas de domínio, ou quando você controla o treino de ponta a ponta e o dataset é grande o bastante. Para a maioria dos produtos em cima de API ou de base aberta grande, LoRA (ou nem fine-tuning) basta.
+
+</Deep>
+
+<Callout type="trap">
+  "Vamos fazer fine-tuning com nossos documentos para o modelo aprender a empresa." Quase sempre é{' '}
+  <Ref to="rag">RAG</Ref> disfarçado: o objetivo é fato recuperável, não comportamento. Fine-tuning
+  nesses PDFs sai caro, envelhece mal e ainda assim alucina com confiança.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a ordem recomendada antes de fine-tuning?',
+      options: [
+        'Fine-tuning → prompt → RAG',
+        'Prompt → few-shot → RAG → fine-tuning',
+        'RAG → fine-tuning → prompt',
+        'Só fine-tuning, se houver GPU',
+      ],
+      answer: 1,
+      why: 'Fine-tuning é o recurso mais caro de manter. Esgote contexto e recuperação antes de mexer em pesos.',
+    },
+    {
+      q: 'O que o LoRA congela e o que ele treina?',
+      options: [
+        'Congela tudo e só muda o tokenizer',
+        'Congela W e treina matrizes finas de baixo rank ao lado',
+        'Treina só a última camada softmax',
+        'Congela o dataset e treina o learning rate',
+      ],
+      answer: 1,
+      why: 'A ideia é atualização de posto baixo: pouca capacidade extra, pouco estado de otimizador, adaptador pequeno e reversível.',
+    },
+    {
+      q: "Fine-tuning é a ferramenta certa para o modelo 'saber' o preço da tabela interna que muda toda semana?",
+      options: [
+        'Sim, com LoRA isso fica sempre atualizado',
+        'Não: fato mutável pede recuperação (RAG) ou ferramenta, não peso treinado',
+        'Sim, desde que o rank seja alto',
+        'Só se usar QLoRA',
+      ],
+      answer: 1,
+      why: 'Peso treinado congela o mundo na data do dataset. Preço e política viva pertencem a busca ou API.',
+    },
+  ]}
+/>

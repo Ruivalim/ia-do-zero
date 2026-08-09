@@ -1,0 +1,121 @@
+<TLDR>
+  Modelos de difusão aprendem uma coisa só: **tirar um pouquinho de ruído de uma imagem**. Fazendo
+  isso cinquenta vezes seguidas, partindo de ruído puro, aparece uma imagem que nunca existiu.
+
+</TLDR>
+
+<Analogy>
+Um restaurador que treinou olhando milhares de quadros sendo progressivamente cobertos de poeira. Ele viu o quadro limpo, viu com pouca poeira, com muita, e completamente encoberto.
+
+Depois de tanto treino, ele fica muito bom numa tarefa específica: dado um quadro sujo, estimar como seria com **um pouco menos** de sujeira.
+
+Agora entregue a ele uma tela de poeira pura e peça para limpar. Ele tira uma camada. Depois outra. A cada passo aparece um pouco mais de estrutura — e no fim há um quadro coerente que nunca foi pintado por ninguém. A poeira inicial determinou qual quadro apareceu.
+
+</Analogy>
+
+<Demo id="diffusion" />
+
+## As duas direções
+
+<Steps
+  items={[
+    [
+      'Processo direto (treino)',
+      'Pegue uma imagem real e adicione ruído gaussiano em pequenas doses, seguindo um cronograma. Depois de muitos passos sobra ruído puro. Esse processo é fixo, não tem nada a aprender.',
+    ],
+    [
+      'Alvo de treino',
+      'Escolha uma imagem, um passo t aleatório e um ruído aleatório. Adicione o ruído correspondente àquele t. Peça à rede que estime o ruído que foi adicionado. A perda é o erro dessa estimativa.',
+    ],
+    [
+      'Processo reverso (geração)',
+      'Comece de ruído puro. A rede estima o ruído; você subtrai uma parte dele; repete. A cada iteração a imagem fica um pouco mais estruturada.',
+    ],
+  ]}
+/>
+
+O truque conceitual é que o passo direto tem forma fechada: dá para pular direto ao passo t sem simular os anteriores. Isso torna o treino barato — cada exemplo é uma amostragem independente de imagem, passo e ruído.
+
+## Por que isso ficou melhor que as GANs
+
+Antes de 2021, geração de imagem era território das GANs, onde um gerador e um discriminador competem. GANs produzem imagens rápidas e sofrem de instabilidade de treino e de _mode collapse_: o gerador descobre um punhado de saídas que enganam o discriminador e para de explorar o resto.
+
+Difusão troca esse jogo por uma regressão simples e estável: estime o ruído. Sem adversário, sem equilíbrio delicado. O preço é a velocidade — em vez de uma passada pela rede, são dezenas.
+
+## Como o texto entra
+
+Um modelo de difusão puro gera imagens quaisquer. Para gerar _a imagem que você pediu_, o prompt precisa influenciar cada passo de remoção de ruído:
+
+- O texto vira <Ref to="embeddings">embeddings</Ref> por um encoder de texto.
+- A rede que estima o ruído recebe esses embeddings via cross-attention, em várias camadas.
+- Assim, a estimativa de ruído passa a depender do texto: o modelo remove ruído _na direção_ do que foi pedido.
+
+Some-se a isso a **orientação sem classificador**: em cada passo, a rede estima o ruído duas vezes — uma com o prompt, outra sem — e o resultado é extrapolado na direção da diferença. O parâmetro de escala dessa extrapolação (o famoso _CFG scale_) controla o quanto o modelo obedece ao texto. Alto demais e a imagem fica saturada e artificial; baixo demais e ela ignora o pedido.
+
+<Callout type="trap" title="O ruído não é aleatório na prática">
+A semente determina o ruído inicial, e o ruído inicial determina fortemente a composição final. Mesma semente e mesmo prompt dão a mesma imagem. É por isso que quem trabalha com esses modelos guarda sementes: elas são o único jeito de voltar a uma composição que deu certo.
+
+Isso também explica por que "gere outra variação" com o mesmo prompt às vezes muda tudo: o ruído inicial mudou, e ele é metade da resposta.
+
+</Callout>
+
+<Callout type="info" title="Latent diffusion">
+  Fazer difusão em pixels de uma imagem de 1024×1024 é caríssimo. Os modelos práticos rodam num
+  **espaço latente** comprimido: um autoencoder reduz a imagem a um tensor bem menor, a difusão
+  acontece lá, e o decoder devolve os pixels no fim. É o que tornou geração de imagem viável em GPU
+  de consumidor.
+
+</Callout>
+
+<Deep>
+**A formulação.** No processo direto, $x_t = \sqrt{\bar\alpha_t}\, x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon$, com $\epsilon \sim \mathcal{N}(0, I)$ e $\bar\alpha_t$ vindo do cronograma de ruído. A rede $\epsilon_\theta(x_t, t)$ é treinada com perda simples $\|\epsilon - \epsilon_\theta(x_t,t)\|^2$. Essa simplificação — prever o ruído em vez de otimizar o limite variacional completo — é o que fez a formulação funcionar bem na prática.
+
+**Cronograma.** Linear era o padrão inicial; cronogramas cosseno distribuem melhor a dificuldade entre os passos e melhoram amostras em resoluções maiores.
+
+**Amostradores.** DDPM segue a cadeia estocástica completa e precisa de muitos passos. DDIM torna a trajetória determinística e permite pular passos. Amostradores mais recentes tratam o processo como uma equação diferencial e usam solvers de ordem alta, chegando a resultados bons com bem menos avaliações da rede. É por isso que o número de passos virou um controle exposto ao usuário: é uma troca direta entre tempo e qualidade.
+
+**Arquitetura.** U-Net com blocos residuais e cross-attention foi o padrão; transformers de difusão (DiT), que tratam patches latentes como tokens, escalam melhor e vêm substituindo a U-Net em modelos recentes.
+
+**Além de imagem.** A mesma receita gera áudio, vídeo e estruturas moleculares. Em vídeo o desafio extra é coerência temporal, tratada com attention ao longo do eixo do tempo. Há também trabalhos aplicando difusão a texto, competindo com a geração autorregressiva do <Ref to="transformer">Transformer</Ref> — uma linha promissora e ainda não dominante.
+
+**Inversão.** Dá para rodar o processo ao contrário a partir de uma imagem existente para descobrir o ruído que a produziria, e então editá-la mudando o prompt. É a base de várias ferramentas de edição guiada por texto.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que exatamente a rede de um modelo de difusão aprende a fazer?',
+      options: [
+        'Gerar a imagem final de uma vez',
+        'Estimar o ruído presente numa imagem parcialmente ruidosa, em um dado passo',
+        'Classificar imagens por qualidade',
+        'Comprimir imagens',
+      ],
+      answer: 1,
+      why: 'O treino é uma regressão: dado x_t e o passo t, estime o ruído adicionado. A geração é apenas essa mesma estimativa aplicada repetidamente, partindo de ruído puro.',
+    },
+    {
+      q: 'Por que difusão substituiu as GANs na geração de imagem?',
+      options: [
+        'Porque é mais rápida na geração',
+        'Porque troca o treino adversarial instável por uma regressão estável, ao custo de muitos passos na geração',
+        'Porque usa menos memória',
+        'Porque não precisa de dados de treino',
+      ],
+      answer: 1,
+      why: 'GANs têm treino instável e mode collapse. Difusão treina com uma perda simples e bem comportada. O preço é a inferência: dezenas de passadas pela rede em vez de uma.',
+    },
+    {
+      q: 'Mesmo prompt, mesma semente, mesmo modelo. O que acontece?',
+      options: [
+        'Uma imagem diferente a cada vez',
+        'A mesma imagem: a semente fixa o ruído inicial, que determina a composição',
+        'Uma imagem melhor a cada execução',
+        'Depende da temperature',
+      ],
+      answer: 1,
+      why: 'O ruído inicial é metade da resposta. Fixá-lo torna a geração reprodutível — e é por isso que quem trabalha com esses modelos guarda sementes junto com os prompts.',
+    },
+  ]}
+/>

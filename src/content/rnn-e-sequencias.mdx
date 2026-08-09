@@ -1,0 +1,121 @@
+<TLDR>
+  Uma RNN lê a sequência em ordem e atualiza um estado a cada passo. É compacta e natural para
+  streaming, mas sofre com **gradientes longos e treino inevitavelmente sequencial**.
+
+</TLDR>
+
+<Analogy>
+Uma pessoa ouve uma frase palavra por palavra e mantém um resumo mental. A cada palavra, combina o resumo anterior com a informação nova. Não guarda a frase inteira; carrega apenas o estado atual.
+
+Para lembrar o começo de um discurso longo, cada atualização precisa preservar essa informação. Um pequeno desgaste repetido muitas vezes apaga o sinal. E ninguém pode processar a palavra seguinte antes de receber o resumo da anterior.
+
+</Analogy>
+
+## Estado que atravessa o tempo
+
+Uma rede recorrente aplica a mesma célula em cada posição. A célula recebe o token atual e o estado anterior, produz um novo estado e, quando necessário, uma saída. Compartilhar pesos permite processar comprimentos diferentes sem criar parâmetros por posição.
+
+Essa estrutura foi o padrão para linguagem e outras sequências por muito tempo. Ela combina ordem, memória compacta e operação incremental: quando chega um evento novo, basta atualizar o estado, sem reprocessar todo o histórico.
+
+<Demo id="vanishing-gradient" />
+
+## O caminho longo do gradiente
+
+Durante o treino, a RNN é desenrolada no tempo. Uma influência do início precisa atravessar cada estado intermediário até a perda distante. No backward, o gradiente percorre o caminho inverso e multiplica repetidamente derivadas semelhantes.
+
+Se o produto encolhe, o começo recebe quase nenhum sinal e a rede aprende apenas dependências curtas. Se cresce, gradientes explodem e a atualização fica instável. Esse não é apenas um inconveniente numérico: limita quais relações distantes o modelo consegue aprender.
+
+O segundo problema é de hardware. O estado do passo seguinte depende do anterior. Mesmo com todos os tokens disponíveis no treino, não se calculam todos os passos de uma camada simultaneamente. GPUs ficam melhores quando recebem grandes multiplicações paralelas, e a recorrência cria uma fila.
+
+## Portas ajudam a memória
+
+LSTM separa um estado de célula e usa portas para decidir quanto esquecer, quanto escrever e quanto expor. O caminho do estado é quase aditivo, permitindo que informação e gradiente atravessem muitos passos sem depender apenas de multiplicações sucessivas.
+
+GRU combina portas em uma célula mais simples. Ambas mitigam o desaparecimento e tornaram recorrência muito mais eficaz. Não eliminam a dependência sequencial: o estado atual ainda precisa do anterior.
+
+Gradient clipping contém explosões limitando a norma antes da atualização. Truncar o histórico reduz custo, mas também impede crédito além da janela. Cada solução administra o caminho; nenhuma transforma a RNN em processamento paralelo de todos os tokens.
+
+<Callout type="trap">
+  O <Ref to="transformer">Transformer</Ref> não venceu apenas porque recebeu mais parâmetros.
+  Self-attention cria um caminho direto entre posições distantes e calcula todas as posições de uma
+  camada em paralelo no treino. A mudança estrutural combinou modelagem de dependências com
+  eficiência de hardware.
+
+</Callout>
+
+## Por que attention mudou o regime
+
+Em self-attention, qualquer token consulta qualquer outro em uma única camada. A distância de interação não cresce com a separação na sequência. Matrizes de todos os tokens podem ser processadas juntas durante o treino.
+
+O preço é diferente: attention completa compara todos os pares, e memória e compute crescem quadraticamente com o comprimento. Uma RNN percorre a sequência com custo linear e estado limitado, embora de forma sequencial. Não existe vantagem absoluta independente do tamanho e da latência exigida.
+
+RNNs ainda aparecem em streaming, dispositivos pequenos e sequências longas quando manter estado compacto importa mais que paralelizar treino. Modelos de espaço de estados retomam a ideia de evolução de um estado com formulações que buscam treino mais paralelo e alcance longo. São uma continuação da linhagem, não uma promessa de substituir todas as arquiteturas.
+
+<Deep>
+Uma célula recorrente simples pode ser escrita como
+
+$$
+h_t=\phi(W_hh_{t-1}+W_xx_t+b)
+$$
+
+No backpropagation through time, o gradiente entre passos distantes contém um produto de jacobianas:
+
+$$
+\frac{\partial h_T}{\partial h_t}=
+\prod_{j=t+1}^{T}\frac{\partial h_j}{\partial h_{j-1}}
+$$
+
+Se os valores singulares dominantes ficam repetidamente abaixo de um, o produto decai de forma exponencial; acima de um, pode explodir. A derivada da ativação participa desse produto, por isso ativações saturadas agravam o desaparecimento.
+
+Backprop through time completo guarda estados e propaga gradientes por toda a sequência. O truncado processa blocos: carrega o estado numericamente para frente, mas corta o grafo entre blocos. Economiza memória e limita o comprimento máximo de atribuição de crédito.
+
+Na LSTM, o estado de célula tem uma atualização aditiva modulada por portas. Quando a porta de esquecimento permanece próxima de preservar e a de entrada limita escrita, existe um caminho de derivada muito mais estável. As portas são aprendidas; não garantem memória eterna e também podem saturar.
+
+Por camada, uma RNN percorre o comprimento com custo linear, mas profundidade temporal sequencial também linear. Attention completa tem custo quadrático em pares, porém profundidade sequencial constante dentro da camada e grande paralelismo. Na geração causal, ambos produzem tokens em ordem; a vantagem de paralelismo do Transformer se manifesta sobretudo no treino e no processamento do prompt.
+
+</Deep>
+
+<Callout type="info">
+  Escolher arquitetura para sequência exige separar três eixos: custo total, quanto pode rodar em
+  paralelo e quanta memória cresce com o comprimento. “Linear” pode ser barato no papel e lento no
+  hardware se cada passo esperar o anterior.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Por que uma RNN é difícil de paralelizar ao longo da sequência?',
+      options: [
+        'Porque cada estado depende do estado anterior',
+        'Porque não compartilha pesos',
+        'Porque exige uma classe por token',
+        'Porque usa apenas convoluções',
+      ],
+      answer: 0,
+      why: 'O passo seguinte só pode ser calculado depois que o estado atual existe. Isso cria uma cadeia temporal no próprio forward.',
+    },
+    {
+      q: 'Como LSTM e GRU ajudam com dependências longas?',
+      options: [
+        'Removendo toda recorrência',
+        'Usando portas e caminhos de estado que preservam melhor informação e gradiente',
+        'Aumentando o threshold para 0,5',
+        'Comparando todos os pares de tokens',
+      ],
+      answer: 1,
+      why: 'As portas controlam escrita e esquecimento, enquanto caminhos quase aditivos reduzem a multiplicação destrutiva de derivadas.',
+    },
+    {
+      q: 'Qual trade-off básico separa RNN de attention completa?',
+      options: [
+        'RNN é quadrática e paralela; attention é linear e sequencial',
+        'RNN tem custo linear e sequencial; attention é quadrática e paralela por camada',
+        'As duas têm exatamente o mesmo custo e paralelismo',
+        'Attention não representa dependências distantes',
+      ],
+      answer: 1,
+      why: 'A recorrência percorre passos em cadeia com estado compacto. Attention forma pares entre posições, custa mais em comprimento, mas calcula a camada em paralelo.',
+    },
+  ]}
+/>

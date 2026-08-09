@@ -1,0 +1,129 @@
+<TLDR>
+  Um <Term id="agente">agente</Term> é um **loop**: o modelo emite uma chamada estruturada de
+  ferramenta, **seu código** executa, e o resultado volta como mensagem. O modelo nunca executa nada
+  — ele só pede.
+
+</TLDR>
+
+<Analogy>
+  É um estagiário com rádio. Ele não tem as chaves do depósito: pede "abre a gaveta 3" pelo rádio,
+  alguém do outro lado abre e descreve o que achou, e o estagiário decide o próximo pedido. Se você
+  der a ele a chave mestra e confiar só no "por favor não apague nada", o problema não é o
+  estagiário — é o desenho do sistema.
+
+</Analogy>
+
+## Definição operacional
+
+Esqueça a fantasia de "IA autônoma que age sozinha". Na engenharia, agente = modelo + **ferramentas** + **orquestrador**:
+
+1. O prompt lista as ferramentas disponíveis (nome, descrição, parâmetros).
+2. O modelo responde com texto **ou** com uma chamada estruturada (_tool call_).
+3. Seu runtime valida, executa, e devolve o resultado como mensagem de ferramenta.
+4. O modelo continua até emitir a resposta final ou bater num limite.
+
+Isso é <Term id="tool-use">tool use</Term>. A inteligência de "quando chamar o quê" está nos pesos; a permissão de **fazer** está no seu código.
+
+<Demo id="agent-loop" />
+
+## Anatomia de uma ferramenta
+
+Uma definição típica carrega:
+
+- **Nome** estável e legível (`buscar_pedido`, não `fn3`).
+- **Descrição** em linguagem natural: quando usar, quando **não** usar, o que retorna.
+- **JSON Schema** dos parâmetros: tipos, obrigatórios, enums.
+
+A descrição é <Term id="prompt">prompt</Term>. Texto vago ("busca coisas no sistema") faz o modelo chamar errado. Texto preciso com exemplos de argumentos bons reduz erro na escolha.
+
+O **resultado** que você devolve também é prompt. Despejar um JSON de mil linhas entope a <Term id="contexto">janela de contexto</Term> e enterra o sinal. Compacte: o que o modelo precisa para o próximo passo, não o dump do banco.
+
+## Por que agentes falham
+
+**Erro composto.** Se cada passo acerta com alta probabilidade, a trajetória inteira ainda falha com frequência. Dez passos dependentes não são "dez vezes a mesma taxa" — são o produto das taxas.
+
+**Loop infinito.** O modelo chama a mesma ferramenta, interpreta mal o erro, tenta de novo. Sem limite de passos e sem detecção de repetição, a conta sobe até o timeout.
+
+**Contexto estourando.** Cada tool result entra no histórico. Sessões longas somem o começo da tarefa ou forçam sumarização tosca.
+
+**Ferramenta demais.** Catálogo enorme com nomes parecidos confunde a escolha. Poucas ferramentas bem nomeadas batem um canivete suíço.
+
+## Padrões que funcionam
+
+- Poucas ferramentas, nomes verbosos, schemas rígidos.
+- Resultado de ferramenta curto e estruturado; erros explícitos (`not_found`, não HTML de 404).
+- **Limite de passos** e de tokens por execução.
+- Checkpoint e retomada: persista o estado do loop, não só a última mensagem.
+- **Humano no meio** para ações irreversíveis (pagar, apagar, enviar e-mail externo).
+- Idempotência e dry-run quando a ferramenta mexe no mundo.
+
+Agente não substitui <Ref to="rag">RAG</Ref> bem feito nem um formulário quando o fluxo é fixo. Use o loop quando a sequência de ações depende do que o mundo devolveu — e aceite o custo de latência, tokens e falha composta. Para "sempre os mesmos três passos", um workflow determinístico com LLM só nos nós difíceis costuma ser mais barato e auditável.
+
+<Versus
+  left="Só chat"
+  right="Agente com ferramentas"
+  rows={[
+    ['Acesso a dados ao vivo', 'Só o que está no prompt', 'Consulta API, banco, busca'],
+    ['Ação no mundo', 'Nenhuma', 'Indireta: seu código executa'],
+    ['Modo de falha típico', 'Alucina o fato', 'Chama errado, loop, efeito colateral'],
+    ['Controle de permissão', 'Irrelevante', 'No runtime, nunca só no prompt'],
+  ]}
+/>
+
+<Deep>
+**Paralelizar.** Chamadas independentes (três buscas sem dependência) podem rodar em paralelo no orquestrador se o modelo (ou o protocolo) emitir várias de uma vez. Sequencial desnecessário é latência grátis.
+
+**Sub-agentes.** Spawnar um agente filho para uma subtarefa isola ferramentas e contexto — e **custa**: cada filho carrega seu próprio histórico. Use quando a subtarefa é longa e especializável; não para cada micropasso.
+
+**ReAct vs planejamento.** ReAct intercala raciocínio e ação. Planejar a lista de passos antes e executar depois reduz zigue-zague em tarefas estáveis, mas falha quando o mundo responde diferente do plano. Híbridos (plano curto + replan ao erro) são comuns.
+
+**Avaliação.** Medir só a resposta final esconde trajetória cara ou perigosa. Eval de agente precisa de: sucesso da tarefa, número de passos, ferramentas chamadas, violações de política, custo. Replay a partir de logs é o que permite debugar.
+
+**Observabilidade.** Trace por execução: prompts, tool calls, latência, erros. Sem isso você não tem produto — tem demo que "às vezes funciona".
+
+</Deep>
+
+<Callout type="trap">
+  Dar ao agente shell irrestrito, `DELETE` em produção ou envio de e-mail e confiar no prompt como
+  controle de acesso. **Prompt não é permissão.** Escopo mínimo, allowlist, confirmação humana e
+  auditoria ficam no código que executa a ferramenta.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Quem executa a ferramenta num agente bem desenhado?',
+      options: [
+        'O próprio modelo, dentro da GPU',
+        'O código do orquestrador, depois de uma chamada estruturada do modelo',
+        'O usuário final, sempre',
+        'O tokenizador',
+      ],
+      answer: 1,
+      why: 'O modelo só emite a intenção estruturada. Execução, permissão e efeitos colaterais são responsabilidade do seu runtime.',
+    },
+    {
+      q: "Por que '95% de acerto por passo' ainda pode ser um agente ruim?",
+      options: [
+        'Porque a temperature está baixa',
+        'Porque o erro se compõe ao longo da trajetória: a chance de acertar todos os passos cai com o produto das taxas',
+        'Porque 95% já é suficiente em qualquer caso',
+        'Porque o BM25 falha',
+      ],
+      answer: 1,
+      why: 'Trajetórias longas multiplicam falhas. Por isso limite de passos, ferramentas simples e verificação no meio importam.',
+    },
+    {
+      q: 'O que a descrição de uma ferramenta realmente é?',
+      options: [
+        'Documentação só para humanos, ignorada no runtime',
+        'Parte do prompt que condiciona quando e como o modelo chama a ferramenta',
+        'O schema SQL da tabela',
+        'A chave de API',
+      ],
+      answer: 1,
+      why: 'Nome + descrição + schema entram no contexto do modelo. Texto ruim = escolha e argumentos ruins.',
+    },
+  ]}
+/>

@@ -1,0 +1,117 @@
+<TLDR>
+  Regressão linear ajusta uma reta ou um hiperplano para minimizar erros quadráticos. Sua força está
+  menos em capturar formas complexas e mais em oferecer **uma relação legível entre entradas e
+  saída**.
+
+</TLDR>
+
+<Analogy>
+Espalhe pregos sobre uma mesa e tente apoiar uma régua no meio deles. A régua não passa por todos, então você escolhe a posição que deixa os desvios pequenos no conjunto.
+
+Cada novo prego influencia a inclinação. Um prego muito distante puxa a régua com força desproporcional, porque o método pune o quadrado da distância.
+
+</Analogy>
+
+## Uma soma ponderada
+
+Com uma entrada, o modelo escolhe inclinação e intercepto. Com várias, continua fazendo a mesma coisa: multiplica cada feature por um coeficiente, soma e acrescenta um viés. A reta vira um hiperplano, difícil de desenhar, mas igualmente simples de calcular.
+
+Essa forma dá uma interpretação direta. Mantendo as outras features fixas, um coeficiente diz quanto a previsão muda quando sua entrada aumenta uma unidade. O sinal aponta a direção; a magnitude depende da unidade usada. Poucos modelos flexíveis oferecem uma leitura tão imediata.
+
+<Demo id="linear-regression" />
+
+No demo, mova um ponto para longe. A reta acompanha. O erro quadrático torna desvios grandes especialmente caros, então outliers exercem muita influência. Às vezes eles são falhas de medição. Às vezes são exatamente os casos importantes. Removê-los sem investigar troca um problema estatístico por uma decisão arbitrária.
+
+## Interpretável não quer dizer causal
+
+Um coeficiente descreve associação condicional às colunas incluídas. Ele não diz o que aconteceria se alguém interviesse naquela variável. Uma feature pode apenas acompanhar uma causa omitida, medir um efeito da própria saída ou servir de proxy para outra condição.
+
+"Mantendo o resto fixo" também pode ser uma situação impossível. Alterar renda sem alterar ocupação, experiência ou região talvez crie uma combinação que quase não existe nos dados. A regressão calcula mesmo assim. Causalidade exige desenho do estudo e hipóteses adicionais, não um coeficiente com sinal convincente.
+
+## Da regressão à classificação
+
+Regressão logística reutiliza a soma ponderada, mas passa o resultado por uma sigmoide para obter um valor entre zero e um. Esse valor alimenta uma decisão de classe por meio de um threshold. O treino usa entropia cruzada, adequada a probabilidades, em vez de erro quadrático.
+
+Apesar do nome, regressão logística é um classificador linear: sua fronteira de decisão continua sendo uma reta ou hiperplano. A sigmoide muda a escala da saída, não a geometria da fronteira.
+
+<Callout type="trap" title="R² não é certificado de qualidade">
+  O R² mede quanto da variação da saída o modelo explica em relação a prever sempre a média. No
+  treino, ele nunca diminui quando você acrescenta variáveis: até uma coluna aleatória pode
+  aproveitar alguma coincidência. Use validação, compare resíduos e considere R² ajustado; não trate
+  um valor alto como prova de utilidade ou causalidade.
+
+</Callout>
+
+## Quando a reta basta
+
+Um modelo linear funciona bem quando o efeito é aproximadamente aditivo, quando o dataset é limitado ou quando explicar coeficientes importa. Também serve como baseline: se uma rede complexa mal supera a reta, talvez a complexidade não se pague.
+
+O diagnóstico mora nos resíduos, a diferença entre observado e previsto. Um padrão curvo indica forma ausente. Um leque que se abre indica variância desigual. Grupos separados sugerem feature omitida. Resíduo não é lixo a descartar; é o mapa do que a hipótese linear não capturou.
+
+<Deep>
+Escrevendo a matriz de features como $X$, os alvos como $y$ e os coeficientes como $\beta$, mínimos quadrados minimiza
+
+$$
+\lVert X\beta-y\rVert_2^2
+$$
+
+Quando as condições algébricas permitem, as equações normais dão
+
+$$
+\hat\beta=(X^\top X)^{-1}X^\top y
+$$
+
+Na implementação, não se calcula a inversa explicitamente: decomposições numéricas são mais estáveis. Com muitas features ou dados em fluxo, métodos iterativos por gradiente evitam formar e resolver o sistema completo.
+
+Se duas colunas carregam quase a mesma informação, surge multicolinearidade. A previsão conjunta pode continuar boa, mas os coeficientes individuais ficam instáveis: pequenas mudanças nos dados transferem peso de uma coluna para a outra. Ridge adiciona penalidade L2 e estabiliza a solução. Lasso usa L1 e pode zerar coeficientes, funcionando também como seleção de features.
+
+Escalonar as entradas é essencial quando há regularização. Penalizar igualmente coeficientes de features medidas em reais, anos e milímetros não significa penalizar igualmente seus efeitos. Padronização coloca as escalas em base comparável e deve ser ajustada apenas no treino.
+
+Heterocedasticidade significa que a variância dos resíduos muda com a entrada. Ela não torna automaticamente a previsão inútil, mas invalida erros-padrão ingênuos e mostra que a incerteza não é constante. Para inferência, use estimativas robustas ou modele a variância; para previsão, avalie os erros por região do espaço.
+
+</Deep>
+
+<Callout type="info">
+  Coeficientes só são comparáveis quando a codificação e a escala das features são conhecidas. Uma
+  magnitude pequena pode representar um efeito grande por unidade real, e categorias de referência
+  mudam a leitura de todas as variáveis indicadoras.
+
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Como interpretar um coeficiente de regressão linear?',
+      options: [
+        'Como efeito causal garantido da feature',
+        'Como mudança prevista na saída por unidade da feature, mantendo as demais fixas',
+        'Como probabilidade de a feature estar correta',
+        'Como erro médio produzido pela coluna',
+      ],
+      answer: 1,
+      why: 'O coeficiente é uma associação condicional dentro do modelo. Intervenção causal exige hipóteses e desenho de estudo adicionais.',
+    },
+    {
+      q: 'Por que um outlier influencia tanto o ajuste por mínimos quadrados?',
+      options: [
+        'Porque recebe automaticamente peso duplo',
+        'Porque o erro é elevado ao quadrado',
+        'Porque muda o número de features',
+        'Porque a regressão remove os demais pontos',
+      ],
+      answer: 1,
+      why: 'Ao elevar o desvio ao quadrado, erros grandes crescem muito mais rápido que erros pequenos e puxam a reta com força.',
+    },
+    {
+      q: 'O que a regressão logística compartilha com a linear?',
+      options: [
+        'A saída sem limite',
+        'O treinamento obrigatório por equações normais',
+        'A soma ponderada das features',
+        'O uso do erro quadrático em toda classificação',
+      ],
+      answer: 2,
+      why: 'A regressão logística começa com a mesma combinação linear. Depois usa sigmoide e entropia cruzada para tratar classificação probabilística.',
+    },
+  ]}
+/>

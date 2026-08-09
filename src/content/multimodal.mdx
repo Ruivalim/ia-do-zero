@@ -1,0 +1,129 @@
+<TLDR>
+  Modelos multimodais colocam imagem, áudio e texto no **mesmo espaço vetorial**. Depois disso, um
+  LLM "vê" imagem porque patches viram tokens e entram no mesmo fluxo do texto.
+
+</TLDR>
+
+<Analogy>
+Uma biblioteca com catálogo único. Cada livro, cada foto e cada gravação recebe a mesma ficha de prateleira: um vetor. Você não precisa saber se a consulta veio em palavras ou em pixels — o sistema procura a ficha mais próxima.
+
+O treino contrastivo é o bibliotecário: toda vez que uma legenda e a foto certa chegam juntas, ele empurra as duas fichas uma em direção à outra. Legendas erradas para aquela foto são empurradas para longe. Depois de muitos pares, "gato preto" e a imagem do gato preto moram no mesmo bairro do espaço.
+
+</Analogy>
+
+## O espaço em comum
+
+Um encoder de texto transforma a legenda em um vetor. Um encoder de visão transforma a imagem em outro. Sem alinhamento, os dois espaços são incomparáveis: proximidade entre um vetor de texto e um de imagem não significa nada.
+
+O treino no estilo CLIP resolve isso com pares (imagem, legenda) e um objetivo simples:
+
+<Steps
+  items={[
+    ['Par correto', 'Aproxima o embedding da imagem do embedding da legenda correspondente.'],
+    [
+      'Pares errados',
+      'Afasta a mesma imagem das outras legendas do lote (e a legenda das outras imagens).',
+    ],
+    [
+      'Espaço compartilhado',
+      'No fim, cosine similarity entre modalidades vira ranking: buscar por texto devolve imagens, e o contrário também.',
+    ],
+  ]}
+/>
+
+Não há rótulo de classe "gato" ou "cachorro". Há só "esta legenda descreve esta imagem". O significado emerge do contraste entre pares.
+
+<Demo id="multimodal-space" />
+
+No demo, ligue e desligue o alinhamento. Com espaços separados, a busca por texto é quase acaso. Com o espaço comum, o par certo sobe no ranking — é a ideia inteira do CLIP em miniatura.
+
+## Como um LLM "vê" uma imagem
+
+Busca cross-modal é uma coisa. Fazer o modelo **falar sobre** a imagem é outra. A receita dominante hoje:
+
+1. Um encoder de visão (frequentemente um ViT) corta a imagem em **patches** — retângulos fixos de pixels.
+2. Cada patch vira um vetor, como um <Term id="token">token</Term> de texto.
+3. Esses _tokens visuais_ entram no mesmo fluxo do LLM: attention, MLP, geração de próximo token.
+
+A partir daí, a pergunta "o que tem na foto?" é só continuação de sequência — com tokens de origem diferente. O modelo não tem um canal mágico de visão; tem mais tokens na <Term id="contexto">janela de contexto</Term>.
+
+Patches são tokens. Quanto menor o patch (ou maior a resolução), mais tokens. Uma imagem de alta resolução custa facilmente centenas a milhares de tokens — e o custo de attention cresce com o comprimento da sequência. Colar várias imagens, screenshots densos ou um PDF página a página enche a janela rápido.
+
+## O que ainda falha de verdade
+
+Compreensão multimodal impressiona em cenas simples e falha onde o humano não hesita:
+
+- **Texto pequeno na imagem.** Placas, UI, números em cantos. Sem OCR dedicado, o patch dilui o detalhe.
+- **Contagem.** "Quantos X?" erra em cena lotada ou com sobreposição.
+- **Relações espaciais.** Esquerda/direita, "atrás de", "entre" — o grid de patches ajuda, a geometria fina é frágil.
+- **Gráficos densos.** Eixos e barras próximas: o modelo resume a cena em vez de ler a tabela embutida.
+
+Não é bug pontual. É o preço de tratar a imagem como patches treinados em legendas, não como sensor com métrica geométrica.
+
+<Callout type="trap" title="O modelo não 'lê' a imagem como você">
+É tentador imaginar um olhar humano sobre a foto. O que acontece é processamento de patches e herança do dado de legendas: o que as pessoas costumavam escrever sobre imagens parecidas.
+
+Se o treino associa "médico" a um estereótipo visual, a resposta carrega esse viés. Se o texto na imagem é ilegível nos patches, o modelo completa com o que a legenda _deveria_ dizer — e soa confiante. Não há "leitura" no sentido de decodificar cada glifo; há padrões no espaço multimodal.
+
+</Callout>
+
+## Compreensão vs geração
+
+**Compreensão** multimodal: imagem (e às vezes áudio) → texto ou decisão. O encoder de visão alimenta o LLM.
+
+**Geração** multimodal: texto (e às vezes imagem de referência) → imagem, áudio ou vídeo. Arquiteturas diferentes — difusão com conditioning, decoders dedicados. Ver <Ref to="difusao">difusão</Ref>.
+
+Chat que "entende" screenshot e gerador de imagem compartilham a ideia de espaço multimodal, não o mesmo produto. Treino, custo e falhas divergem.
+
+Áudio segue o molde: encoder → sequência de vetores → espaço comum ou tokens no LLM. Muda a cadência temporal; a lógica de alinhamento se repete.
+
+<Deep>
+**InfoNCE em palavras.** No lote com $N$ pares, para cada imagem $i$ há um positivo (a legenda $i$) e $N-1$ negativos. A perda puxa o logit do par correto para cima em relação aos errados, via softmax sobre similaridades (temperatura $\tau$ controla a nitidez). Simetricamente, costuma-se somar o sentido texto→imagem e imagem→texto. É classificação em lote disfarçada de ranking.
+
+**Projeção para o espaço comum.** Os encoders de visão e de texto não precisam ter a mesma dimensão interna. Cabeças lineares (às vezes com normalização L2) projetam para um espaço compartilhado onde o produto interno ou a cosine faz sentido. O alinhamento mora nessas projeções e no treino contrastivo, não na arquitetura bruta do backbone.
+
+**Resolução e tiling.** Subir a resolução multiplica patches. Alternativa prática: fatiar a imagem em telhas (tiles), codificar cada uma, e concatenar os tokens — com algum token global de baixa resolução para contexto da cena inteira. O trade-off é óbvio: mais fidelidade local, mais tokens, mais latência e mais pressão na janela.
+
+**Cross-attention vs concatenação.** Duas famílias de fusão: (1) tokens de imagem e de texto na **mesma** sequência, self-attention trata todos iguais; (2) o texto gera queries e a imagem fornece keys/values via **cross-attention**, sem misturar comprimentos de forma simétrica. Concatenação é simples e escala com o comprimento total; cross-attention isola modalidades e pode economizar quando a imagem é longa e o texto curto. Híbridos existem.
+
+**Por que OCR dedicado ainda ganha em documento denso.** Um pipeline de OCR + layout + LLM recebe caracteres e posições explícitas. O multimodal de propósito geral vê patches: fonte pequena, colunas apertadas e tabelas viram mistura espacial. Em fatura, contrato ou slide lotado, o sistema com OCR costuma extrair o número certo com mais confiabilidade — e com custo previsível por página — enquanto o LLM multimodal gasta milhares de tokens "olhando" e ainda confabula glifos ambíguos.
+
+</Deep>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que o treino contrastivo estilo CLIP faz com um par imagem–legenda correto?',
+      options: [
+        'Classifica a imagem em milhares de classes fixas',
+        'Aproxima os dois embeddings no espaço comum e afasta os pares errados do lote',
+        'Gera a legenda pixel a pixel',
+        'Comprime a imagem para caber no contexto',
+      ],
+      answer: 1,
+      why: 'Não há rótulo de classe obrigatório. O sinal é relativo: o par certo fica perto; os outros do lote viram negativos. Depois disso, busca por cosine entre modalidades funciona.',
+    },
+    {
+      q: "Como um LLM típico passa a 'ver' uma imagem?",
+      options: [
+        'Um canal de pixels separado que contorna o Transformer',
+        'Um encoder de visão transforma patches em tokens visuais que entram no mesmo fluxo do texto',
+        'Convertendo a imagem inteira em uma única palavra do vocabulário',
+        'Baixando a resolução até caber em um embedding de texto',
+      ],
+      answer: 1,
+      why: 'Patches viram tokens. A partir daí, attention e geração de próximo token tratam visão e linguagem na mesma sequência — com o custo de centenas a milhares de tokens por imagem.',
+    },
+    {
+      q: 'Por que OCR dedicado ainda costuma vencer LLM multimodal em documento denso?',
+      options: [
+        'Porque multimodal não aceita PDF',
+        'Porque OCR entrega caracteres e layout explícitos; patches diluem texto pequeno e tabelas apertadas',
+        'Porque multimodal não usa attention',
+        'Porque OCR não precisa de GPU',
+      ],
+      answer: 1,
+      why: "Documento denso é problema de leitura de glifos e estrutura, não só de 'entender a cena'. Pipeline com OCR expõe o texto; o modelo de patches herda resolução, tiling e vieses de legenda.",
+    },
+  ]}
+/>
