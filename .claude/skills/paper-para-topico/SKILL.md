@@ -1,6 +1,6 @@
 ---
 name: paper-para-topico
-description: Transforma um paper (PDF, arXiv id ou URL) numa página nova da trilha "Papers" do IA do Zero — baixa o PDF para public/papers/, insere a entrada no currículo e escreve a página em português com TLDR, analogia, camada técnica, pegadinha e quiz. Use quando o usuário mandar um paper, um link de arXiv ou pedir "vira isso num tópico de estudo".
+description: Transforma um paper (PDF, arXiv id ou URL) numa página nova da trilha "Papers" do IA do Zero — lê o PDF fora do repositório, insere a entrada no currículo com os links da fonte e escreve a página em português com TLDR, analogia, camada técnica, pegadinha e quiz. Use quando o usuário mandar um paper, um link de arXiv ou pedir "vira isso num tópico de estudo".
 ---
 
 # Paper → página da estante

@@ -1,5 +1,7 @@
 # IA do Zero
 
+**No ar em https://ruivalim.github.io/ia-do-zero/**
+
 Curso interativo de inteligência artificial em português. Do que é um dado até como um LLM
 escolhe a próxima palavra — com demos que rodam de verdade no navegador, sem backend e sem
 chamar API nenhuma.

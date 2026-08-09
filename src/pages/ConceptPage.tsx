@@ -10,6 +10,27 @@ import NotFound from './NotFound'
 
 const pages = import.meta.glob<{ default: ComponentType }>('../content/*.mdx')
 
+/**
+ * Um `lazy()` por slug, guardado fora do componente e para sempre.
+ *
+ * Criar o lazy durante o render (mesmo dentro de useMemo) quebra a navegação
+ * entre capítulos: o React descarta o render que suspende, o useMemo do fiber
+ * descartado vai junto, a tentativa seguinte cria outro lazy que suspende de
+ * novo, e o ciclo não fecha. Como a troca de rota é uma transition, a tela
+ * fica exibindo o capítulo anterior — a URL muda e o conteúdo não.
+ */
+const lazyPages = new Map<string, ComponentType>()
+
+function pageComponent(slug: string): ComponentType | null {
+  const cached = lazyPages.get(slug)
+  if (cached) return cached
+  const load = pages[`../content/${slug}.mdx`]
+  if (!load) return null
+  const Component = lazy(load)
+  lazyPages.set(slug, Component)
+  return Component
+}
+
 const cx = (...p: (string | false | null | undefined)[]) => p.filter(Boolean).join(' ')
 
 export default function ConceptPage() {
@@ -17,10 +38,7 @@ export default function ConceptPage() {
   const concept = BY_SLUG[slug]
   const { isDone, toggleDone } = useApp()
 
-  const Body = useMemo(() => {
-    const load = pages[`../content/${slug}.mdx`]
-    return load ? lazy(load) : null
-  }, [slug])
+  const Body = useMemo(() => pageComponent(slug), [slug])
 
   if (!concept) return <NotFound />
 
