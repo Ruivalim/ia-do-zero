@@ -1,13 +1,13 @@
 import { NavLink } from 'react-router'
-import { CONCEPTS, TRACKS, conceptsOf } from '../lib/curriculum'
+import { COURSE_CONCEPTS, PAPERS, TRACKS, conceptsOf } from '../lib/curriculum'
 import { useApp } from '../lib/store'
 
 const cx = (...p: (string | false | null | undefined)[]) => p.filter(Boolean).join(' ')
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { done } = useApp()
-  const total = CONCEPTS.length
-  const finished = CONCEPTS.filter((c) => done[c.slug]).length
+  const total = COURSE_CONCEPTS.length
+  const finished = COURSE_CONCEPTS.filter((c) => done[c.slug]).length
   const pct = Math.round((finished / total) * 100)
 
   return (
@@ -28,7 +28,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-8">
-        {TRACKS.map((track) => {
+        {TRACKS.filter((t) => t.kind === 'curso' || PAPERS.length > 0).map((track) => {
           const items = conceptsOf(track.id)
           const doneCount = items.filter((c) => done[c.slug]).length
           return (
@@ -44,7 +44,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   aria-hidden="true"
                 />
                 <span className="text-[11px] font-semibold tracking-wide text-faint uppercase group-hover:text-muted">
-                  {track.n}. {track.title}
+                  {track.kind === 'papers' ? track.title : `${track.n}. ${track.title}`}
                 </span>
                 <span className="ml-auto font-mono text-[10px] text-faint">
                   {doneCount}/{items.length}

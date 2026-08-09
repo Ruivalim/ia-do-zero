@@ -1,13 +1,21 @@
 import { Link } from 'react-router'
-import { CONCEPTS, TOTAL_MINUTES, TRACKS, conceptsOf } from '../lib/curriculum'
+import {
+  COURSE_CONCEPTS,
+  COURSE_TRACKS,
+  PAPERS,
+  PAPER_TRACKS,
+  TOTAL_MINUTES,
+  conceptsOf,
+} from '../lib/curriculum'
 import { useApp } from '../lib/store'
 
-const demoCount = CONCEPTS.filter((c) => c.demo).length
+const demoCount = COURSE_CONCEPTS.filter((c) => c.demo).length
 
 export default function Home() {
   const { done, resetProgress } = useApp()
-  const finished = CONCEPTS.filter((c) => done[c.slug]).length
-  const firstUndone = CONCEPTS.find((c) => !done[c.slug]) ?? CONCEPTS[0]
+  const finished = COURSE_CONCEPTS.filter((c) => done[c.slug]).length
+  const firstUndone = COURSE_CONCEPTS.find((c) => !done[c.slug]) ?? COURSE_CONCEPTS[0]
+  const papersTrack = PAPER_TRACKS[0]
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-16">
@@ -52,9 +60,9 @@ export default function Home() {
 
         <dl className="mt-10 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-line pt-7 sm:grid-cols-4">
           {[
-            ['conceitos', String(CONCEPTS.length)],
+            ['conceitos', String(COURSE_CONCEPTS.length)],
             ['demos interativos', String(demoCount)],
-            ['trilhas', String(TRACKS.length)],
+            ['trilhas', String(COURSE_TRACKS.length)],
             ['minutos de leitura', `≈ ${TOTAL_MINUTES}`],
           ].map(([label, value]) => (
             <div key={label}>
@@ -67,9 +75,11 @@ export default function Home() {
 
       {/* ── tracks ──────────────────────────────────────────────────────── */}
       <section>
-        <h2 className="mb-6 text-xl font-semibold tracking-tight text-ink">As seis trilhas</h2>
+        <h2 className="mb-6 text-xl font-semibold tracking-tight text-ink">
+          As {COURSE_TRACKS.length === 6 ? 'seis' : COURSE_TRACKS.length} trilhas
+        </h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          {TRACKS.map((t) => {
+          {COURSE_TRACKS.map((t) => {
             const items = conceptsOf(t.id)
             const d = items.filter((c) => done[c.slug]).length
             return (
@@ -109,6 +119,38 @@ export default function Home() {
           })}
         </div>
       </section>
+
+      {/* ── papers ──────────────────────────────────────────────────────── */}
+      {papersTrack && PAPERS.length > 0 && (
+        <section className="mt-14">
+          <div className="mb-2 flex flex-wrap items-baseline gap-3">
+            <h2 className="text-xl font-semibold tracking-tight text-ink">{papersTrack.title}</h2>
+            <Link to={`/t/${papersTrack.slug}`} className="text-sm text-faint hover:text-teal">
+              ver todos ({PAPERS.length}) →
+            </Link>
+          </div>
+          <p className="mb-6 max-w-2xl text-sm leading-relaxed text-muted">{papersTrack.tagline}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {PAPERS.slice(0, 4).map((c) => (
+              <Link
+                key={c.slug}
+                to={`/c/${c.slug}`}
+                className="rounded-xl border border-line bg-surface p-4 transition-colors hover:border-teal/50"
+              >
+                <div className="text-sm font-medium text-ink">{c.title}</div>
+                <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
+                  {c.tagline}
+                </div>
+                {c.paper && (
+                  <div className="mt-2.5 text-[11px] text-faint">
+                    {c.paper.authors} · {c.paper.year}
+                  </div>
+                )}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── how to use ──────────────────────────────────────────────────── */}
       <section className="mt-14 rounded-2xl border border-line bg-surface p-6">

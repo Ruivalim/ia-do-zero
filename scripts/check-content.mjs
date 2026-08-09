@@ -72,7 +72,34 @@ for (const s of orphanPages) warn.push(`src/content/${s}.mdx não está no curr�
 const orphanDemos = demos.filter((d) => !demoIds.includes(d))
 for (const d of orphanDemos) warn.push(`src/demos/${d}.tsx não está declarado no currículo`)
 
-console.log(`conceitos: ${slugs.length} · páginas: ${pages.length} · demos: ${demos.length}`)
+// ── estante de papers ───────────────────────────────────────────────────────
+
+// cada bloco `paper: { … }` precisa de pelo menos um link, e nada de PDF local
+const paperBlocks = [...conceptBlock.matchAll(/paper: \{([^}]*)\}/g)].map((m) => m[1])
+for (const block of paperBlocks) {
+  const title = /title: '([^']*)'/.exec(block)?.[1] ?? '?'
+  if (!/\burl:/.test(block) && !/\bpdfUrl:/.test(block)) {
+    problems.push(`paper "${title}": sem url nem pdfUrl`)
+  }
+  if (/\bpdf:/.test(block.replace(/pdfUrl:/g, ''))) {
+    problems.push(`paper "${title}": PDF local não é servido, use pdfUrl`)
+  }
+  for (const m of block.matchAll(/(url|pdfUrl): '([^']*)'/g)) {
+    if (!/^https:\/\//.test(m[2])) problems.push(`paper "${title}": ${m[1]} não é https`)
+  }
+}
+
+// páginas geradas pelo esqueleto e nunca escritas
+for (const slug of slugs) {
+  const p = join(contentDir, `${slug}.mdx`)
+  if (existsSync(p) && readFileSync(p, 'utf8').includes('TODO')) {
+    problems.push(`${slug}.mdx: ainda tem TODO do esqueleto`)
+  }
+}
+
+console.log(
+  `conceitos: ${slugs.length} · páginas: ${pages.length} · demos: ${demos.length} · papers: ${paperBlocks.length}`,
+)
 for (const w of warn) console.log(`  aviso  ${w}`)
 for (const p of problems) console.log(`  ERRO   ${p}`)
 

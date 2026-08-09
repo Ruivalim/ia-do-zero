@@ -12,8 +12,9 @@ export default function TrackPage() {
 
   const items = conceptsOf(track.id)
   const minutes = items.reduce((a, c) => a + c.min, 0)
-  const idx = TRACKS.indexOf(track)
-  const nextTrack = TRACKS[idx + 1]
+  // prev/next stays inside the same kind: the course never spills into the shelf
+  const siblings = TRACKS.filter((t) => t.kind === track.kind)
+  const nextTrack = siblings[siblings.indexOf(track) + 1]
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-8 sm:py-14">
@@ -22,12 +23,14 @@ export default function TrackPage() {
           className="mb-3 text-[11px] font-semibold tracking-[0.14em] uppercase"
           style={{ color: track.hex }}
         >
-          Trilha {track.n}
+          {track.kind === 'papers' ? 'Estante' : `Trilha ${track.n}`}
         </div>
         <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">{track.title}</h1>
         <p className="mt-3 text-lg leading-relaxed text-muted">{track.tagline}</p>
         <div className="mt-4 flex gap-4 text-xs text-faint">
-          <span>{items.length} conceitos</span>
+          <span>
+            {items.length} {track.kind === 'papers' ? 'papers' : 'conceitos'}
+          </span>
           <span>{items.filter((c) => c.demo).length} demos</span>
           <span>≈ {minutes} min</span>
         </div>
@@ -58,6 +61,12 @@ export default function TrackPage() {
                 <span className="mt-2 flex flex-wrap gap-3 text-[11px] text-faint">
                   <span>{c.min} min</span>
                   {c.demo && <span className="text-accent">demo</span>}
+                  {c.paper && (
+                    <span>
+                      {c.paper.authors} · {c.paper.year}
+                    </span>
+                  )}
+                  {c.paper?.pdfUrl && <span className="text-teal">PDF</span>}
                 </span>
               </span>
             </Link>

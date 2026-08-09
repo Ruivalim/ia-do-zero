@@ -5,6 +5,7 @@ import type { MDXComponents } from 'mdx/types'
 import { BY_SLUG, neighbours, trackOf, unlockedBy } from '../lib/curriculum'
 import { useApp } from '../lib/store'
 import * as mdxComponents from '../components/content'
+import PaperCard from '../components/PaperCard'
 import NotFound from './NotFound'
 
 const pages = import.meta.glob<{ default: ComponentType }>('../content/*.mdx')
@@ -42,7 +43,7 @@ export default function ConceptPage() {
             style={{ background: track.hex }}
             aria-hidden="true"
           />
-          Trilha {track.n} · {track.title}
+          {track.kind === 'papers' ? track.title : `Trilha ${track.n} · ${track.title}`}
         </Link>
 
         <h1 className="text-3xl leading-tight font-bold tracking-tight text-ink sm:text-4xl">
@@ -68,6 +69,8 @@ export default function ConceptPage() {
             </span>
           )}
         </div>
+
+        {concept.paper && <PaperCard paper={concept.paper} />}
       </header>
 
       {/* ── body ────────────────────────────────────────────────────────── */}

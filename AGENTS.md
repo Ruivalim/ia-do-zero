@@ -6,6 +6,10 @@ Tudo roda no navegador do leitor.
 
 Leia este arquivo inteiro antes de escrever qualquer linha.
 
+Se a tarefa é **transformar um paper numa página**, leia também [`PAPERS.md`](./PAPERS.md) — é o
+contrato da trilha `Papers`, que tem estrutura própria e um scaffold (`pnpm paper`). Tudo daqui
+continua valendo lá.
+
 ---
 
 ## Regras que não se negociam

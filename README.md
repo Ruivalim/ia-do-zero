@@ -5,6 +5,8 @@ escolhe a próxima palavra — com demos que rodam de verdade no navegador, sem 
 chamar API nenhuma.
 
 - **41 conceitos** em 6 trilhas, do básico ao avançado
+- Uma **estante de papers** à parte: uma página por paper, em português, com link direto para o
+  PDF original na fonte
 - **37 demos interativos**, todos calculados localmente em JavaScript
 - Cada página tem: uma frase, uma analogia, um demo, uma camada técnica opcional, a pegadinha
   comum e um quiz
@@ -58,6 +60,38 @@ src/
 
 O contrato completo de implementação — tokens de cor, kit de UI, regras de escrita — está em
 [`AGENTS.md`](./AGENTS.md).
+
+## Acrescentando um paper
+
+A trilha `Papers` (`track: 'p'`) é a estante: fora da numeração do curso, uma página por paper.
+Nenhum PDF é hospedado aqui — a página linka a fonte e o navegador do leitor abre ou baixa de lá.
+
+```bash
+pnpm paper \
+  --slug attention-is-all-you-need \
+  --title "Atenção substitui recorrência" \
+  --tagline "O paper que jogou fora a recorrência." \
+  --authors "Vaswani et al." --year 2017 --venue "NeurIPS 2017" \
+  --arxiv 1706.03762
+```
+
+O comando insere a entrada no currículo entre os marcadores `<papers:*>` e escreve um esqueleto em
+`src/content/<slug>.mdx`. Depois é só escrever a página seguindo [`PAPERS.md`](./PAPERS.md) e rodar
+`pnpm check`.
+
+Quem usa Claude Code tem a skill `paper-para-topico` em `.claude/skills/` — mande o PDF ou o link
+do arXiv e ela faz o caminho inteiro. Qualquer outro modelo ou harness usa o `PAPERS.md` direto.
+
+## Publicando no GitHub Pages
+
+`pnpm build` já gera `dist/404.html` (fallback de SPA) e `dist/.nojekyll`. Em Pages de projeto, o
+site fica num subdiretório, então informe o caminho no build:
+
+```bash
+BASE_PATH=/ia-do-zero/ pnpm build
+```
+
+Em domínio próprio ou Pages de usuário, `pnpm build` puro basta.
 
 ## Decisões
 

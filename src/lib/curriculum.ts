@@ -1,4 +1,4 @@
-export type TrackId = 't0' | 't1' | 't2' | 't3' | 't4' | 't5'
+export type TrackId = 't0' | 't1' | 't2' | 't3' | 't4' | 't5' | 'p'
 
 export type Track = {
   id: TrackId
@@ -7,8 +7,31 @@ export type Track = {
   title: string
   tagline: string
   /** tailwind token name from index.css @theme */
-  color: 'blueish' | 'emerald' | 'accent' | 'violet' | 'amber' | 'rose'
+  color: 'blueish' | 'emerald' | 'accent' | 'violet' | 'amber' | 'rose' | 'teal'
   hex: string
+  /**
+   * `curso` tracks form the numbered linear course. `papers` is the parallel
+   * shelf: one page per paper, no fixed order, each page carries its PDF.
+   */
+  kind: 'curso' | 'papers'
+}
+
+/**
+ * The source paper behind a `papers` page. Nothing is hosted here: the reader
+ * goes to the publisher, so the repo stays leve and o direito autoral é deles.
+ */
+export type Paper = {
+  /** original title, kept in the language it was published in */
+  title: string
+  /** "Vaswani et al." — short form, never a full author list */
+  authors: string
+  year: number
+  /** NeurIPS, arXiv preprint, ICLR… */
+  venue?: string
+  /** canonical landing page (arXiv abs, DOI, publisher) */
+  url?: string
+  /** direct link to the PDF at the source — the browser opens or downloads it */
+  pdfUrl?: string
 }
 
 export type Concept = {
@@ -24,6 +47,8 @@ export type Concept = {
   /** key into the demo registry; page renders it inline via <Demo/> in the MDX */
   demo?: string
   tags?: string[]
+  /** only on `papers` pages: metadata of the source paper */
+  paper?: Paper
 }
 
 export const TRACKS: Track[] = [
@@ -35,6 +60,7 @@ export const TRACKS: Track[] = [
     tagline: 'O vocabulário mínimo: o que é IA, o que é aprender, o que é um dado.',
     color: 'blueish',
     hex: '#60a5fa',
+    kind: 'curso',
   },
   {
     id: 't1',
@@ -44,6 +70,7 @@ export const TRACKS: Track[] = [
     tagline: 'Os algoritmos que vieram antes das redes — e que ainda ganham em muita coisa.',
     color: 'emerald',
     hex: '#34d399',
+    kind: 'curso',
   },
   {
     id: 't2',
@@ -53,6 +80,7 @@ export const TRACKS: Track[] = [
     tagline: 'Do neurônio único ao deep learning: como uma rede realmente aprende.',
     color: 'accent',
     hex: '#22d3ee',
+    kind: 'curso',
   },
   {
     id: 't3',
@@ -62,6 +90,7 @@ export const TRACKS: Track[] = [
     tagline: 'Como texto vira número, e como o número vira a próxima palavra.',
     color: 'violet',
     hex: '#a78bfa',
+    kind: 'curso',
   },
   {
     id: 't4',
@@ -71,6 +100,7 @@ export const TRACKS: Track[] = [
     tagline: 'Prompt, RAG, fine-tuning, agentes, avaliação, custo. A parte que vira produto.',
     color: 'amber',
     hex: '#fbbf24',
+    kind: 'curso',
   },
   {
     id: 't5',
@@ -80,6 +110,17 @@ export const TRACKS: Track[] = [
     tagline: 'Alinhamento, viés, difusão, escala. O que está na fronteira e o que pode dar errado.',
     color: 'rose',
     hex: '#fb7185',
+    kind: 'curso',
+  },
+  {
+    id: 'p',
+    slug: 'papers',
+    n: 6,
+    title: 'Papers',
+    tagline: 'Um paper por página, explicado em português, com o PDF original do lado.',
+    color: 'teal',
+    hex: '#2dd4bf',
+    kind: 'papers',
   },
 ]
 
@@ -463,6 +504,45 @@ export const CONCEPTS: Concept[] = [
     min: 10,
     prereqs: ['alucinacao'],
   },
+
+  // ── p · papers ────────────────────────────────────────────────────────────
+  // Gerado por `pnpm paper`. Novas entradas entram logo abaixo desta linha.
+  // <papers:start>
+  {
+    slug: 'attention-is-all-you-need',
+    track: 'p',
+    title: 'Atenção substitui recorrência',
+    tagline:
+      'O paper que jogou fora a recorrência, deixou o treino paralelo e virou a base de todo LLM.',
+    min: 14,
+    prereqs: ['self-attention', 'transformer'],
+    paper: {
+      title: 'Attention Is All You Need',
+      authors: 'Vaswani et al.',
+      year: 2017,
+      venue: 'NeurIPS 2017',
+      url: 'https://arxiv.org/abs/1706.03762',
+      pdfUrl: 'https://arxiv.org/pdf/1706.03762',
+    },
+  },
+  {
+    slug: 'training-compute-optimal-llms',
+    track: 'p',
+    title: 'Modelo menor, mais dados',
+    tagline:
+      'Com o mesmo compute do Gopher, o Chinchilla trocou parâmetros por tokens — e venceu em quase tudo.',
+    min: 12,
+    prereqs: ['leis-de-escala', 'transformer'],
+    paper: {
+      title: 'Training Compute-Optimal Large Language Models',
+      authors: 'Hoffmann et al.',
+      year: 2022,
+      venue: 'arXiv 2022',
+      url: 'https://arxiv.org/abs/2203.15556',
+      pdfUrl: 'https://arxiv.org/pdf/2203.15556',
+    },
+  },
+  // <papers:end>
 ]
 
 // ── índices derivados ───────────────────────────────────────────────────────
@@ -481,15 +561,34 @@ export function trackOf(concept: Concept): Track {
   return TRACK_BY_ID[concept.track]
 }
 
-/** linear order across the whole course — powers prev/next */
-export const ORDER: string[] = CONCEPTS.map((c) => c.slug)
+export function kindOf(concept: Concept): Track['kind'] {
+  return TRACK_BY_ID[concept.track].kind
+}
+
+/** the six numbered tracks — the course proper */
+export const COURSE_TRACKS: Track[] = TRACKS.filter((t) => t.kind === 'curso')
+
+/** the parallel shelf */
+export const PAPER_TRACKS: Track[] = TRACKS.filter((t) => t.kind === 'papers')
+
+export const COURSE_CONCEPTS: Concept[] = CONCEPTS.filter((c) => kindOf(c) === 'curso')
+
+/** one entry per paper page, newest first is the file order */
+export const PAPERS: Concept[] = CONCEPTS.filter((c) => kindOf(c) === 'papers')
+
+/** linear order inside each kind — powers prev/next without mixing the two */
+export const ORDER: string[] = COURSE_CONCEPTS.map((c) => c.slug)
+export const PAPER_ORDER: string[] = PAPERS.map((c) => c.slug)
 
 export function neighbours(slug: string): { prev?: Concept; next?: Concept } {
-  const i = ORDER.indexOf(slug)
+  const concept = BY_SLUG[slug]
+  if (!concept) return {}
+  const order = kindOf(concept) === 'papers' ? PAPER_ORDER : ORDER
+  const i = order.indexOf(slug)
   if (i < 0) return {}
   return {
-    prev: i > 0 ? BY_SLUG[ORDER[i - 1]] : undefined,
-    next: i < ORDER.length - 1 ? BY_SLUG[ORDER[i + 1]] : undefined,
+    prev: i > 0 ? BY_SLUG[order[i - 1]] : undefined,
+    next: i < order.length - 1 ? BY_SLUG[order[i + 1]] : undefined,
   }
 }
 
@@ -498,4 +597,4 @@ export function unlockedBy(slug: string): Concept[] {
   return CONCEPTS.filter((c) => c.prereqs?.includes(slug))
 }
 
-export const TOTAL_MINUTES = CONCEPTS.reduce((a, c) => a + c.min, 0)
+export const TOTAL_MINUTES = COURSE_CONCEPTS.reduce((a, c) => a + c.min, 0)

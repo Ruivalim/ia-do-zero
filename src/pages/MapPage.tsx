@@ -19,7 +19,7 @@ export default function MapPage() {
       </p>
 
       <div className="mt-10 flex flex-col gap-12">
-        {TRACKS.map((track) => (
+        {TRACKS.filter((t) => conceptsOf(t.id).length > 0).map((track) => (
           <section key={track.id}>
             <div className="mb-4 flex items-center gap-2.5">
               <span
@@ -31,13 +31,13 @@ export default function MapPage() {
                 className="text-sm font-semibold tracking-wide uppercase"
                 style={{ color: track.hex }}
               >
-                {track.n}. {track.title}
+                {track.kind === 'papers' ? track.title : `${track.n}. ${track.title}`}
               </h2>
               <Link
                 to={`/t/${track.slug}`}
                 className="ml-auto text-xs text-faint hover:text-accent"
               >
-                abrir trilha →
+                {track.kind === 'papers' ? 'abrir a estante →' : 'abrir trilha →'}
               </Link>
             </div>
 
