@@ -1,0 +1,62 @@
+name: Novo conceito
+description: Propor um capítulo novo do curso
+labels: [conceito]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Antes: confira em `src/lib/curriculum.ts` se o conceito já existe com outro
+        nome. Conceito novo só entra se ensinar **uma** coisa que nenhuma página já
+        ensina.
+
+  - type: input
+    id: titulo
+    attributes:
+      label: Título proposto
+      placeholder: Destilação de modelo
+    validations:
+      required: true
+
+  - type: dropdown
+    id: trilha
+    attributes:
+      label: Trilha
+      options:
+        - Fundamentos
+        - Machine Learning clássico
+        - Redes neurais
+        - NLP e LLMs
+        - IA aplicada
+        - Avançado e riscos
+    validations:
+      required: true
+
+  - type: textarea
+    id: tldr
+    attributes:
+      label: A ideia em uma frase
+      description: O que a pessoa sabe depois de ler que não sabia antes.
+    validations:
+      required: true
+
+  - type: input
+    id: prereq
+    attributes:
+      label: Pré-requisitos
+      description: Slugs de conceitos que precisam vir antes
+      placeholder: rede-multicamada, funcoes-de-ativacao
+
+  - type: textarea
+    id: demo
+    attributes:
+      label: Demo
+      description: >
+        Opcional, mas é o que faz a página valer. Qual controle a pessoa mexe e o
+        que muda de forma dramática na tela? Lembre: cálculo local, sem rede, sem
+        dependência nova.
+
+  - type: textarea
+    id: pegadinha
+    attributes:
+      label: A pegadinha
+      description: O erro comum que quase todo mundo comete sobre esse conceito.

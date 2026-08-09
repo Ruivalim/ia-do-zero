@@ -1,0 +1,27 @@
+# Licença do conteúdo — CC BY-SA 4.0
+
+Copyright (c) 2026 Rui Valim
+
+O conteúdo didático deste repositório — as páginas em `src/content/**`, os textos
+das legendas e dos quizzes, e a prosa da documentação — está licenciado sob a
+**Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**.
+
+Texto completo da licença: https://creativecommons.org/licenses/by-sa/4.0/legalcode.pt
+Resumo legível: https://creativecommons.org/licenses/by-sa/4.0/deed.pt
+
+Em resumo, você pode copiar, redistribuir, adaptar e usar comercialmente o
+conteúdo, desde que:
+
+- **Atribuição** — dê o crédito apropriado ("IA do Zero", de Rui Valim), com link
+  para https://ruivalim.github.io/ia-do-zero/ e para a licença, e indique se fez
+  mudanças.
+- **CompartilhaIgual** — se você remixar ou adaptar, distribua o resultado sob a
+  mesma licença (CC BY-SA 4.0).
+
+O **código** do projeto tem licença separada, MIT. Veja [`LICENSE`](./LICENSE).
+
+Os papers citados na trilha `Papers` **não** estão sob esta licença: eles pertencem
+aos seus respectivos autores e editores. Este repositório não hospeda nenhum PDF;
+as páginas apenas linkam a fonte original. As páginas em português sobre os papers
+são obra derivada de leitura, escritas por este projeto, e essas sim seguem
+CC BY-SA 4.0.

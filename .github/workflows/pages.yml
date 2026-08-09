@@ -30,10 +30,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # índice x páginas x demos x links dos papers
-      - run: pnpm check
-
-      - run: pnpm typecheck
+      # check, typecheck e prettier ficam no workflow CI, que roda no mesmo push.
+      # Aqui só o build: `pnpm build` já faz `tsc -b --noEmit` antes do vite.
 
       # Pages de projeto serve em /<repo>/, então o build precisa do prefixo
       - run: pnpm build

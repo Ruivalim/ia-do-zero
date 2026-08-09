@@ -2,6 +2,15 @@
   "name": "ia-do-zero",
   "private": true,
   "version": "0.1.0",
+  "description": "Curso interativo de inteligência artificial em português, sem backend e sem chamada de API.",
+  "license": "MIT",
+  "author": "Rui Valim",
+  "homepage": "https://ruivalim.github.io/ia-do-zero/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ruivalim/ia-do-zero.git"
+  },
+  "bugs": "https://github.com/Ruivalim/ia-do-zero/issues",
   "type": "module",
   "packageManager": "pnpm@10.26.2",
   "scripts": {

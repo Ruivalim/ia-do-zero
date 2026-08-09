@@ -104,3 +104,23 @@ Em domínio próprio ou Pages de usuário, `pnpm build` puro basta.
 - **Aleatoriedade determinística.** Os demos usam um PRNG com semente para abrir sempre igual.
 - **Nenhuma chamada de rede.** Os "modelos" dos demos de LLM são tabelas de probabilidade
   escritas à mão, declaradas como ilustrativas na legenda de cada um.
+
+## Contribuindo
+
+Correção de typo, link quebrado ou erro factual pode ir direto em PR. Conceito novo, paper
+novo ou mudança de arquitetura: abra uma issue antes. O passo a passo está em
+[`CONTRIBUTING.md`](./CONTRIBUTING.md), e as regras de implementação em
+[`AGENTS.md`](./AGENTS.md).
+
+Vale o [Código de Conduta](./CODE_OF_CONDUCT.md). Para vulnerabilidade, veja
+[`SECURITY.md`](./SECURITY.md) — não abra issue pública.
+
+## Licença
+
+- **Código** (`src/**` exceto `src/content/**`, `scripts/**`, configuração): MIT — veja
+  [`LICENSE`](./LICENSE).
+- **Conteúdo didático** (`src/content/**` e a prosa deste repositório): CC BY-SA 4.0 — veja
+  [`LICENSE-CONTENT`](./LICENSE-CONTENT).
+
+Os papers citados na estante pertencem aos seus autores e editores. Nenhum PDF é hospedado
+aqui; as páginas apenas linkam a fonte.

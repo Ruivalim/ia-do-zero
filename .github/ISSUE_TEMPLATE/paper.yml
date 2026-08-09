@@ -1,0 +1,53 @@
+name: Novo paper
+description: Propor um paper para a estante
+labels: [paper]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        A trilha `Papers` é uma página em português por paper. **Nenhum PDF é
+        hospedado aqui** — a página linka a fonte e o navegador do leitor abre de lá.
+        Veja [`PAPERS.md`](../../PAPERS.md).
+
+  - type: input
+    id: titulo
+    attributes:
+      label: Título original
+      description: Na língua em que foi publicado, sem traduzir
+      placeholder: Attention Is All You Need
+    validations:
+      required: true
+
+  - type: input
+    id: autores
+    attributes:
+      label: Autoria
+      description: Forma curta, nunca a lista inteira
+      placeholder: Vaswani et al.
+    validations:
+      required: true
+
+  - type: input
+    id: ano
+    attributes:
+      label: Ano e veículo
+      placeholder: 2017 · NeurIPS 2017
+    validations:
+      required: true
+
+  - type: input
+    id: link
+    attributes:
+      label: Link canônico
+      description: arXiv abs, DOI ou página do editor — não o PDF direto
+      placeholder: https://arxiv.org/abs/1706.03762
+    validations:
+      required: true
+
+  - type: textarea
+    id: porque
+    attributes:
+      label: Por que este paper
+      description: O que ele mudou, e a qual conceito do curso ele se liga.
+    validations:
+      required: true

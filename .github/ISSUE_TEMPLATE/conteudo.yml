@@ -1,0 +1,38 @@
+name: Erro de conteúdo
+description: Explicação errada, número furado, analogia enganosa, typo
+labels: [conteúdo]
+body:
+  - type: input
+    id: pagina
+    attributes:
+      label: Página
+      description: Slug ou URL do conceito
+      placeholder: leis-de-escala
+    validations:
+      required: true
+
+  - type: textarea
+    id: trecho
+    attributes:
+      label: Trecho como está hoje
+      description: Cole o texto exato.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: O que está errado
+      description: >
+        Se for questão de fato (número, data, nome, citação), inclua a fonte.
+        Parte do curso foi escrita com ajuda de modelo de linguagem, então erro
+        factual acontece — fonte ajuda a corrigir rápido.
+    validations:
+      required: true
+
+  - type: textarea
+    id: sugestao
+    attributes:
+      label: Sugestão de redação
+      description: Opcional. Tom do projeto é direto e seco, veja AGENTS.md.

@@ -1,0 +1,44 @@
+name: Bug
+description: Algo quebrado no site, num demo ou no build
+labels: [bug]
+body:
+  - type: textarea
+    id: o-que
+    attributes:
+      label: O que acontece
+      description: Descreva o comportamento errado. Se for visual, cole print ou vídeo.
+    validations:
+      required: true
+
+  - type: textarea
+    id: passos
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. Abrir /conceito/perceptron
+        2. Arrastar o slider de learning rate até o fim
+        3. O gráfico some
+    validations:
+      required: true
+
+  - type: input
+    id: pagina
+    attributes:
+      label: Página ou demo
+      description: URL ou slug (ex. `self-attention`, demo `tokenizer`)
+
+  - type: input
+    id: ambiente
+    attributes:
+      label: Navegador e sistema
+      placeholder: Chrome 131 / macOS 15 · Safari iOS 18
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checagens
+      options:
+        - label: Procurei uma issue aberta sobre isso e não achei
+          required: true
