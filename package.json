@@ -20,6 +20,7 @@
     "typecheck": "tsc -b --noEmit",
     "check": "node scripts/check-content.mjs",
     "paper": "node scripts/new-paper.mjs",
+    "paper-cli": "node scripts/paper-cli.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{json,md}\""
   },
   "dependencies": {
