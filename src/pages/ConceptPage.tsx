@@ -5,10 +5,12 @@ import type { MDXComponents } from 'mdx/types'
 import { BY_SLUG, neighbours, trackOf, unlockedBy } from '../lib/curriculum'
 import { useApp } from '../lib/store'
 import * as mdxComponents from '../components/content'
+import DynamicQuiz from '../components/DynamicQuiz'
 import PaperCard from '../components/PaperCard'
 import NotFound from './NotFound'
 
 const pages = import.meta.glob<{ default: ComponentType }>('../content/*.mdx')
+const components = { ...mdxComponents, Quiz: DynamicQuiz } as unknown as MDXComponents
 
 /**
  * Um `lazy()` por slug, guardado fora do componente e para sempre.
@@ -93,7 +95,7 @@ export default function ConceptPage() {
 
       {/* ── body ────────────────────────────────────────────────────────── */}
       <div className="prose">
-        <MDXProvider components={mdxComponents as unknown as MDXComponents}>
+        <MDXProvider components={components}>
           <Suspense fallback={<div className="py-16 text-sm text-faint">carregando conteúdo…</div>}>
             {Body ? (
               <Body />
