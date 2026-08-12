@@ -1,0 +1,165 @@
+<TLDR>
+  O Gemma 4 reúne modelos abertos de 2,3B a 31B parâmetros e mostra, no modelo de 12B, que **imagem
+  e áudio podem entrar no transformer por projeções diretas**, sem encoders dedicados.
+</TLDR>
+
+<Analogy>
+  Um sistema multimodal costuma contratar dois intérpretes: um transforma imagem em uma língua
+  intermediária, outro faz o mesmo com áudio, e só então o modelo principal trabalha. O Gemma 4 12B
+  testa uma entrada mais curta. Recorta a imagem, fatia o som e entrega cada pedaço diretamente na
+  dimensão que o modelo já entende. Menos intérpretes, mais responsabilidade para o modelo
+  principal.
+</Analogy>
+
+## O problema antes do paper
+
+Um modelo <Ref to="multimodal">multimodal</Ref> normalmente combina um transformer de linguagem
+com encoders especializados. Um ViT comprime pixels. Um encoder de áudio transforma espectrogramas
+em representações contínuas. Esses módulos funcionam, mas ocupam memória, criam caminhos separados
+e fragmentam a implementação. Trocar resolução, modalidade ou hardware pode exigir decisões
+específicas para cada encoder.
+
+Contexto longo traz outro custo. A <Ref to="janela-de-contexto">KV cache</Ref> guarda chaves e
+valores das camadas de atenção para não recalcular o passado a cada token. Quanto maior a sequência,
+mais memória ela consome. Somar imagem, áudio, texto e reasoning trace piora a pressão sobre essa
+cache.
+
+O relatório tenta resolver esses problemas sem apostar num único modelo gigante. A família inclui
+modelos densos com 2,3B, 4,5B, 12B e 31B parâmetros efetivos, além de um
+
+<Ref to="mixture-of-experts">Mixture of Experts</Ref> com 26B no total e 3,8B ativos. O objetivo é
+cobrir hardware móvel e aceleradores grandes com a mesma base de recursos: multimodalidade, thinking
+mode, contexto longo e checkpoints quantizados.
+
+## A ideia
+
+A mudança mais diferente está no modelo de 12B. Em vez de começar por encoders pré-treinados e
+congelados, ele aprende desde o início a converter entradas brutas para o espaço de
+
+<Ref to="embeddings">embeddings</Ref> do modelo de linguagem.
+
+<Steps
+  items={[
+    [
+      'Recortar a imagem',
+      'A imagem vira blocos RGB de 48 por 48 pixels. Cada bloco contém 6.912 valores.',
+    ],
+    [
+      'Projetar os pixels',
+      'Uma multiplicação matricial de 35 milhões de parâmetros leva cada bloco à dimensão interna do transformer.',
+    ],
+    [
+      'Preservar a posição',
+      'Embeddings de coordenadas 2D informam onde cada bloco estava, seguidos por LayerNorm.',
+    ],
+    [
+      'Fatiar o áudio',
+      'Áudio de 16 kHz vira trechos de 40 ms, cada um com 640 amostras, projetados diretamente no mesmo espaço.',
+    ],
+  ]}
+/>
+
+Depois disso, os tokens visuais, sonoros e textuais passam pelo mesmo
+
+<Ref to="transformer">transformer decoder</Ref>. O áudio já é uma sequência temporal, então essa
+entrada não recebe codificação posicional extra. Nos demais tamanhos, a família mantém encoders
+separados: E2B e E4B usam um encoder visual de 150M e um de áudio de 305M; os modelos maiores usam
+um encoder visual de 550M, exceto o 12B.
+
+A família também alterna atenção local e global. O E2B usa quatro camadas locais para uma global;
+os outros usam cinco para uma. Nas camadas globais dos modelos maiores, as chaves também servem
+como valores. Com p-RoPE parcial e compartilhamento de KV nos modelos menores, o relatório mede
+redução de até 37,5% na memória da KV cache global.
+
+## O que mudou depois
+
+O 12B sem encoder dedicado alcançou 69,1 no MMMU Pro, 79,7 no MATH-Vision e 88,4 no
+InfographicVQA. Em áudio, obteve WER de 0,047 para português do Brasil no FLEURS. Esses resultados
+não provam que encoders separados ficaram inúteis. Mostram que uma projeção direta pode sustentar
+visão e áudio competitivos quando o backbone é treinado junto desde o começo.
+
+A escala também produziu ganhos em texto. Com thinking mode, o 31B marcou 89,2 no AIME 2026 sem
+ferramentas, 80,0 no LiveCodeBench v6 e 84,3 no GPQA Diamond. No RULER com 128 mil tokens, sem
+thinking mode, marcou 96,4, contra 66,0 do Gemma 3 27B. O MoE de 26B ficou próximo do 31B em vários
+testes usando cerca de 4B parâmetros por token.
+
+Para implantação, o checkpoint 31B caiu de 64 GB em bf16 para 19,2 GB em Q4_0, fora 1,10 GB de
+KV cache int8 em 32 mil tokens. O encoder de áudio quantizado caiu de 390 MB no Gemma 3n para 87
+MB. A família inclui ainda um drafter de quatro camadas para speculative decoding: ele propõe
+tokens futuros, e o modelo principal verifica o lote.
+
+O paper é recente, então ainda não demonstra um legado histórico. Sua contribuição verificável é
+uma família open-weight sob licença Apache 2.0 e uma evidência concreta de que multimodalidade sem
+encoder dedicado funciona na escala de 12B.
+
+<Deep>
+  Para visão, cada bloco bruto pode ser escrito como $x \in \mathbb{R}^{48 \times 48 \times 3}$.
+  Depois de achatar, $x \in \mathbb{R}^{6912}$, e a entrada do modelo é aproximadamente
+  $h = \operatorname{LayerNorm}(xW + p_{i,j})$, onde $W$ é a projeção aprendida e $p_{i,j}$ codifica
+  as coordenadas 2D. Para áudio, $a \in \mathbb{R}^{640}$ vira $h = aW_a$ a cada 40 ms. A
+  simplicidade arquitetural não elimina custo: ela transfere o aprendizado de features do encoder
+  para o treino conjunto do backbone.
+
+Na atenção, uma sequência de comprimento $n$ ainda cobra custo quadrático nas camadas globais.
+A janela local limita cada token a uma vizinhança, reduzindo esse trecho para algo proporcional a
+$n \cdot w$, mas camadas globais periódicas mantêm comunicação distante. Reusar $K$ como $V$ evita
+uma projeção e parte da cache. p-RoPE aplica RoPE a 25% das dimensões nas camadas globais, enquanto
+as locais usam RoPE completo.
+
+Há duas armadilhas de implementação. O modelo instruction-tuned encerra turnos com o token
+`<turn|>`, não com `<eos>`, e thinking mode exige `<|think|>` no turno inicial de sistema. No
+modelo 12B, pesos de projeção, normalização e coordenadas precisam casar exatamente com a
+dimensão interna. Uma projeção direta com checkpoint incompatível não é um encoder genérico.
+
+</Deep>
+
+<Callout type="trap">
+  "Sem encoder" não significa jogar pixels e WAVs crus dentro do tokenizer. Ainda existem recorte,
+  redimensionamento, projeções aprendidas, posição 2D e normalização. O que desaparece é o encoder
+  profundo e separado. Também não é uma conclusão para toda a família: só o 12B usa esse desenho.
+</Callout>
+
+<Callout type="warn">
+  O relatório reconhece riscos de viés sociocultural, desinformação, uso malicioso e privacidade. Os
+  dados foram filtrados, mas os autores recomendam monitoramento contínuo, revisão humana e
+  proteções no nível da aplicação. O paper descreve categorias amplas de dados, com corte em janeiro
+  de 2025, sem publicar a composição detalhada nem uma ablação que isole cada mudança.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'O que torna a arquitetura do Gemma 4 12B diferente dos outros tamanhos?',
+      options: [
+        'Ela não usa atenção',
+        'Ela projeta blocos de imagem e trechos de áudio diretamente no espaço do LLM',
+        'Ela aceita somente texto',
+        'Ela usa todos os 26B parâmetros por token',
+      ],
+      answer: 1,
+      why: 'O 12B substitui encoders dedicados por projeções leves de blocos RGB e trechos brutos de áudio.',
+    },
+    {
+      q: 'Por que o Gemma 4 alterna atenção local e global?',
+      options: [
+        'Para remover o tokenizer',
+        'Para treinar só o encoder visual',
+        'Para reduzir custo e KV cache sem perder toda a comunicação a longa distância',
+        'Para converter um modelo denso em MoE',
+      ],
+      answer: 2,
+      why: 'A atenção local limita o trabalho por token; camadas globais periódicas ainda conectam partes distantes da sequência.',
+    },
+    {
+      q: 'Qual conclusão o paper sustenta sobre encoders multimodais?',
+      options: [
+        'Todo encoder dedicado ficou obsoleto',
+        'Projeção direta funciona apenas para texto',
+        'Um modelo de 12B treinado do zero pode aprender visão e áudio competitivos sem encoders dedicados',
+        'Quantização substitui o treinamento multimodal',
+      ],
+      answer: 2,
+      why: 'A evidência vale para o 12B apresentado. Os outros tamanhos ainda usam encoders separados, então não cabe generalizar para todo caso.',
+    },
+  ]}
+/>

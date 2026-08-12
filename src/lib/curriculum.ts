@@ -542,6 +542,23 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2203.15556',
     },
   },
+  {
+    slug: 'gemma-4',
+    track: 'p',
+    title: 'Multimodal sem encoder separado',
+    tagline:
+      'O Gemma 4 projeta imagem e áudio direto no transformer de 12B e combina contexto longo, quantização e modelos de vários tamanhos.',
+    min: 14,
+    prereqs: ['multimodal', 'transformer'],
+    paper: {
+      title: 'Gemma 4 Technical Report',
+      authors: 'Gemma Team',
+      year: 2026,
+      venue: 'arXiv 2026',
+      url: 'https://arxiv.org/abs/2607.02770v2',
+      pdfUrl: 'https://arxiv.org/pdf/2607.02770v2',
+    },
+  },
   // <papers:end>
 ]
 
