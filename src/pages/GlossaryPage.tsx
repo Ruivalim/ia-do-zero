@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { GLOSSARY, GLOSSARY_KEYS } from '../lib/glossary'
 import { BY_SLUG } from '../lib/curriculum'
+import { usePageMeta } from '../lib/meta'
 
 const norm = (s: string) =>
   s
@@ -11,6 +12,12 @@ const norm = (s: string) =>
 
 export default function GlossaryPage() {
   const [q, setQ] = useState('')
+
+  usePageMeta({
+    title: 'Glossário',
+    description:
+      'Todo o vocabulário do curso em uma página: cada termo em uma linha, com link para o capítulo que explica direito.',
+  })
 
   const keys = useMemo(() => {
     const needle = norm(q.trim())

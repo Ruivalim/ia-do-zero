@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import { BY_SLUG, CONCEPTS, TRACKS, conceptsOf, trackOf } from '../lib/curriculum'
 import { useApp } from '../lib/store'
+import { usePageMeta } from '../lib/meta'
 
 /**
  * The prerequisite graph, laid out by track as columns of cards with the
@@ -9,6 +10,11 @@ import { useApp } from '../lib/store'
  */
 export default function MapPage() {
   const { done } = useApp()
+
+  usePageMeta({
+    title: 'Mapa do curso',
+    description: `As ${CONCEPTS.length} páginas do curso e o que cada uma exige antes — o grafo de pré-requisitos inteiro.`,
+  })
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-8 sm:py-14">

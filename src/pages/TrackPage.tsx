@@ -1,12 +1,22 @@
 import { Link, useParams } from 'react-router'
 import { TRACKS, conceptsOf } from '../lib/curriculum'
 import { useApp } from '../lib/store'
+import { usePageMeta } from '../lib/meta'
 import NotFound from './NotFound'
 
 export default function TrackPage() {
   const { trackSlug = '' } = useParams()
   const track = TRACKS.find((t) => t.slug === trackSlug)
   const { done } = useApp()
+
+  usePageMeta({
+    title: !track
+      ? 'Página não encontrada'
+      : track.kind === 'papers'
+        ? track.title
+        : `Trilha ${track.n} · ${track.title}`,
+    description: track?.tagline,
+  })
 
   if (!track) return <NotFound />
 

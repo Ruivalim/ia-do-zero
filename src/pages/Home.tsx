@@ -8,11 +8,13 @@ import {
   conceptsOf,
 } from '../lib/curriculum'
 import { useApp } from '../lib/store'
+import { usePageMeta } from '../lib/meta'
 
 const demoCount = COURSE_CONCEPTS.filter((c) => c.demo).length
 
 export default function Home() {
   const { done, resetProgress } = useApp()
+  usePageMeta({})
   const finished = COURSE_CONCEPTS.filter((c) => done[c.slug]).length
   const firstUndone = COURSE_CONCEPTS.find((c) => !done[c.slug]) ?? COURSE_CONCEPTS[0]
   const papersTrack = PAPER_TRACKS[0]

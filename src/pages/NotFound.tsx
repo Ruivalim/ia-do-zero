@@ -1,6 +1,9 @@
 import { Link } from 'react-router'
+import { usePageMeta } from '../lib/meta'
 
 export default function NotFound() {
+  usePageMeta({ title: 'Página não encontrada' })
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col items-start px-4 py-20 sm:px-8">
       <span className="font-mono text-5xl text-faint">404</span>

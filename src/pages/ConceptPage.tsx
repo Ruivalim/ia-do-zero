@@ -4,6 +4,7 @@ import { MDXProvider } from '@mdx-js/react'
 import type { MDXComponents } from 'mdx/types'
 import { BY_SLUG, neighbours, trackOf, unlockedBy } from '../lib/curriculum'
 import { useApp } from '../lib/store'
+import { usePageMeta } from '../lib/meta'
 import * as mdxComponents from '../components/content'
 import DynamicQuiz from '../components/DynamicQuiz'
 import PaperCard from '../components/PaperCard'
@@ -41,6 +42,11 @@ export default function ConceptPage() {
   const { isDone, toggleDone } = useApp()
 
   const Body = useMemo(() => pageComponent(slug), [slug])
+
+  usePageMeta({
+    title: concept?.title ?? 'Página não encontrada',
+    description: concept?.tagline,
+  })
 
   if (!concept) return <NotFound />
 
