@@ -1,4 +1,4 @@
-import { Suspense, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useApp } from '../lib/store'
 import { BY_SLUG } from '../lib/curriculum'
@@ -265,8 +265,26 @@ export type QuizQ = {
   why: string
 }
 
-export function Quiz({ questions }: { questions: QuizQ[] }) {
+export function Quiz({
+  questions,
+  onRetry,
+  onComplete,
+}: {
+  questions: QuizQ[]
+  /** re-embaralha e zera as respostas; sem isso o bloco não oferece "tentar de novo" */
+  onRetry?: () => void
+  /** chamado uma vez, quando a última pergunta é respondida */
+  onComplete?: (correct: number, total: number) => void
+}) {
   const [picked, setPicked] = useState<Record<number, number>>({})
+  const uid = useId()
+
+  const done = questions.every((_, qi) => picked[qi] !== undefined)
+  const correct = questions.reduce((n, item, qi) => n + (picked[qi] === item.answer ? 1 : 0), 0)
+
+  useEffect(() => {
+    if (done) onComplete?.(correct, questions.length)
+  }, [done, correct, questions.length, onComplete])
 
   return (
     <section className="not-prose mt-10 rounded-2xl border border-line bg-surface p-5">
@@ -280,11 +298,11 @@ export function Quiz({ questions }: { questions: QuizQ[] }) {
           const answered = choice !== undefined
           return (
             <div key={item.q}>
-              <div className="mb-2.5 font-medium text-ink">
+              <div id={`${uid}-q${qi}`} className="mb-2.5 font-medium text-ink">
                 <span className="mr-1.5 font-mono text-sm text-faint">{qi + 1}.</span>
                 {item.q}
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div role="group" aria-labelledby={`${uid}-q${qi}`} className="flex flex-col gap-1.5">
                 {item.options.map((opt, oi) => {
                   const isRight = oi === item.answer
                   const isPicked = choice === oi
@@ -306,16 +324,25 @@ export function Quiz({ questions }: { questions: QuizQ[] }) {
                         {String.fromCharCode(97 + oi)})
                       </span>
                       {opt}
-                      {answered && isRight && <span className="ml-2 text-emerald">✓</span>}
+                      {answered && isRight && (
+                        <span className="ml-2 text-emerald">
+                          ✓<span className="sr-only"> resposta correta</span>
+                        </span>
+                      )}
                       {answered && isPicked && !isRight && (
-                        <span className="ml-2 text-rose">✗</span>
+                        <span className="ml-2 text-rose">
+                          ✗<span className="sr-only"> sua resposta, incorreta</span>
+                        </span>
                       )}
                     </button>
                   )
                 })}
               </div>
               {answered && (
-                <p className="fade-up mt-2.5 rounded-lg bg-surface-2 px-3 py-2 text-sm leading-relaxed text-muted">
+                <p
+                  aria-live="polite"
+                  className="fade-up mt-2.5 rounded-lg bg-surface-2 px-3 py-2 text-sm leading-relaxed text-muted"
+                >
                   {item.why}
                 </p>
               )}
@@ -323,6 +350,31 @@ export function Quiz({ questions }: { questions: QuizQ[] }) {
           )
         })}
       </div>
+
+      {done && (
+        <div className="fade-up mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-4">
+          <p aria-live="polite" className="text-sm text-muted">
+            <strong className={correct === questions.length ? 'text-emerald' : 'text-ink'}>
+              {correct} de {questions.length}
+            </strong>{' '}
+            {correct === questions.length
+              ? '— entendido. Pode seguir.'
+              : '— as explicações acima cobrem o que faltou.'}
+          </p>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={() => {
+                setPicked({})
+                onRetry()
+              }}
+              className="rounded-lg border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-accent/50 hover:text-ink"
+            >
+              Tentar de novo
+            </button>
+          )}
+        </div>
+      )}
     </section>
   )
 }
