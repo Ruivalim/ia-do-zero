@@ -36,6 +36,8 @@ export default function Palette({ open, onClose }: { open: boolean; onClose: () 
   const [cursor, setCursor] = useState(0)
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
+  /** quem abriu a paleta — o foco volta pra lá no Esc, senão o Tab recomeça do topo */
+  const opener = useRef<HTMLElement | null>(null)
 
   const results = useMemo(() => {
     const needle = norm(q.trim())
@@ -59,6 +61,7 @@ export default function Palette({ open, onClose }: { open: boolean; onClose: () 
   useEffect(() => {
     if (open) {
       setQ('')
+      opener.current = document.activeElement as HTMLElement | null
       const t = setTimeout(() => inputRef.current?.focus(), 10)
       return () => clearTimeout(t)
     }
@@ -66,15 +69,21 @@ export default function Palette({ open, onClose }: { open: boolean; onClose: () 
 
   if (!open) return null
 
+  /** navegar move o foco pro <main>, então só devolvemos ao gatilho quando cancela */
+  const close = (restoreFocus: boolean) => {
+    if (restoreFocus) opener.current?.focus()
+    onClose()
+  }
+
   const go = (hit: Hit) => {
     navigate(hit.to)
-    onClose()
+    close(false)
   }
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-[12vh] backdrop-blur-sm"
-      onClick={onClose}
+      onClick={() => close(true)}
       role="presentation"
     >
       <div
@@ -88,8 +97,12 @@ export default function Palette({ open, onClose }: { open: boolean; onClose: () 
           ref={inputRef}
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="palette-results"
+          aria-activedescendant={results[cursor] ? `palette-hit-${cursor}` : undefined}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') onClose()
+            if (e.key === 'Escape') close(true)
             if (e.key === 'ArrowDown') {
               e.preventDefault()
               setCursor((c) => Math.min(results.length - 1, c + 1))
@@ -103,14 +116,23 @@ export default function Palette({ open, onClose }: { open: boolean; onClose: () 
           placeholder="Buscar conceito ou termo…"
           className="w-full border-b border-line bg-transparent px-4 py-3.5 text-ink outline-none placeholder:text-faint"
         />
-        <ul className="scroll-thin max-h-[52vh] overflow-y-auto p-2">
+        <ul
+          id="palette-results"
+          role="listbox"
+          aria-label="Resultados"
+          className="scroll-thin max-h-[52vh] overflow-y-auto p-2"
+        >
           {results.length === 0 && (
             <li className="px-3 py-6 text-center text-sm text-faint">Nada encontrado.</li>
           )}
           {results.map((hit, i) => (
-            <li key={`${hit.kind}-${hit.title}`}>
+            <li key={`${hit.kind}-${hit.title}`} role="presentation">
               <button
                 type="button"
+                id={`palette-hit-${i}`}
+                role="option"
+                aria-selected={i === cursor}
+                tabIndex={-1}
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => go(hit)}
                 className={cx(

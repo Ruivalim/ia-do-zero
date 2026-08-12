@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useApp } from '../lib/store'
 import Sidebar from './Sidebar'
@@ -42,8 +42,22 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [drawer, setDrawer] = useState(false)
   const [palette, setPalette] = useState(false)
   const { pathname } = useLocation()
+  const main = useRef<HTMLElement>(null)
+  const lastPath = useRef(pathname)
 
   useEffect(() => setDrawer(false), [pathname])
+
+  /**
+   * Numa SPA o teclado e o leitor de tela ficam onde estavam: quem clicou num
+   * link da sidebar continua na sidebar, e o Tab seguinte segue de lá. Jogar o
+   * foco no <main> a cada rota faz a navegação se comportar como a do browser.
+   * A primeira renderização fica de fora — ninguém navegou para chegar nela.
+   */
+  useEffect(() => {
+    if (lastPath.current === pathname) return
+    lastPath.current = pathname
+    main.current?.focus()
+  }, [pathname])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -188,7 +202,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main id="conteudo" className="min-w-0 flex-1">
+        <main id="conteudo" ref={main} tabIndex={-1} className="min-w-0 flex-1 outline-none">
           {children}
         </main>
       </div>
