@@ -17,6 +17,7 @@
  *
  * Atalho: --arxiv 1706.03762 preenche --url e --pdfUrl sozinho.
  */
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -104,6 +105,15 @@ const entry = [
   .join('\n')
 
 writeFileSync(curriculumPath, curriculum.replace(END, `${entry}\n${END}`))
+
+// Tagline longa passa da largura do prettier, e o CI roda `prettier --check`.
+// Formatar aqui evita que a entrada recém-criada reprove o build de quem a criou.
+const fmt = spawnSync('node', [join(root, 'node_modules/prettier/bin/prettier.cjs'), '--write', curriculumPath], {
+  encoding: 'utf8',
+})
+if (fmt.status !== 0) {
+  console.log('aviso: prettier não rodou, passe `pnpm format` antes de commitar')
+}
 console.log('index adicionado em src/lib/curriculum.ts')
 
 // ── esqueleto da página ─────────────────────────────────────────────────────

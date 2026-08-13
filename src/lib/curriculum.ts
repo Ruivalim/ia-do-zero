@@ -563,7 +563,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'language-models-are-few-shot-learners',
     track: 'p',
     title: 'Few-shot sem atualizar pesos',
-    tagline: 'Escalar o modelo para 175 bilhões de parâmetros fez few-shot no contexto competir com fine-tuning em várias tarefas.',
+    tagline:
+      'Escalar o modelo para 175 bilhões de parâmetros fez few-shot no contexto competir com fine-tuning em várias tarefas.',
     min: 12,
     prereqs: ['prompting', 'transformer', 'pretreino-e-postreino'],
     paper: {
@@ -579,7 +580,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'deep-residual-learning-for-image-recognition',
     track: 'p',
     title: 'Aprender o resíduo, não a função',
-    tagline: 'Empilhar camadas piorava o erro de treino. Reformular cada bloco como F(x) + x reverteu isso até 152 camadas.',
+    tagline:
+      'Empilhar camadas piorava o erro de treino. Reformular cada bloco como F(x) + x reverteu isso até 152 camadas.',
     min: 12,
     prereqs: ['cnn', 'backpropagation'],
     paper: {
@@ -595,7 +597,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'generative-adversarial-networks',
     track: 'p',
     title: 'Gerar amostras enganando um juiz',
-    tagline: 'Um gerador fabrica amostras; um discriminador tenta detectá-las. No equilíbrio, as duas distribuições coincidem.',
+    tagline:
+      'Um gerador fabrica amostras; um discriminador tenta detectá-las. No equilíbrio, as duas distribuições coincidem.',
     min: 12,
     prereqs: ['rede-multicamada', 'backpropagation'],
     paper: {
@@ -611,7 +614,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'lora-low-rank-adaptation-of-large-language-models',
     track: 'p',
     title: 'Congelar a base, treinar o desvio',
-    tagline: 'No GPT-3 175B, aprender só o desvio de posto baixo corta os parâmetros treináveis em 10.000 vezes e some na hora de servir.',
+    tagline:
+      'No GPT-3 175B, aprender só o desvio de posto baixo corta os parâmetros treináveis em 10.000 vezes e some na hora de servir.',
     min: 12,
     prereqs: ['fine-tuning-e-lora', 'transformer', 'self-attention'],
     paper: {
@@ -627,7 +631,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'react-synergizing-reasoning-and-acting-in-language-models',
     track: 'p',
     title: 'Raciocinar e agir no mesmo loop',
-    tagline: 'O modelo intercala pensamento e ação: o raciocínio planeja, a ferramenta busca fato no mundo.',
+    tagline:
+      'O modelo intercala pensamento e ação: o raciocínio planeja, a ferramenta busca fato no mundo.',
     min: 12,
     prereqs: ['prompting', 'agentes', 'rag'],
     paper: {
@@ -643,7 +648,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'generative-agents-interactive-simulacra-of-human-behavior',
     track: 'p',
     title: 'Memória, reflexão e plano para parecer humano',
-    tagline: 'Um fluxo de memória, reflexão e plano deixa 25 agentes espalhar um convite e aparecer numa festa sem script.',
+    tagline:
+      'Um fluxo de memória, reflexão e plano deixa 25 agentes espalhar um convite e aparecer numa festa sem script.',
     min: 12,
     prereqs: ['agentes', 'prompting', 'rag', 'janela-de-contexto'],
     paper: {
@@ -659,7 +665,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'high-resolution-image-synthesis-with-latent-diffusion-models',
     track: 'p',
     title: 'Difusão no latente, não no pixel',
-    tagline: 'Um autoencoder tira o detalhe que o olho não vê; a difusão aprende só a composição, e o custo cai o bastante para caber numa GPU.',
+    tagline:
+      'Um autoencoder tira o detalhe que o olho não vê; a difusão aprende só a composição, e o custo cai o bastante para caber numa GPU.',
     min: 12,
     prereqs: ['difusao', 'cnn', 'self-attention'],
     paper: {
@@ -675,7 +682,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'direct-preference-optimization-your-language-model-is-secretly-a-reward-model',
     track: 'p',
     title: 'O modelo já é o reward model',
-    tagline: 'DPO reescreve o objetivo do RLHF como classificação: a política e o reward implícito são a mesma rede.',
+    tagline:
+      'DPO reescreve o objetivo do RLHF como classificação: a política e o reward implícito são a mesma rede.',
     min: 12,
     prereqs: ['rlhf-e-dpo', 'pretreino-e-postreino'],
     paper: {
@@ -691,7 +699,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'locating-and-editing-factual-associations-in-gpt',
     track: 'p',
     title: 'Fatos no MLP do meio, editáveis com posto um',
-    tagline: 'Causal tracing acha o fato no MLP do último token do sujeito; um update de posto um troca o objeto.',
+    tagline:
+      'Causal tracing acha o fato no MLP do último token do sujeito; um update de posto um troca o objeto.',
     min: 12,
     prereqs: ['transformer', 'proximo-token'],
     paper: {
@@ -707,7 +716,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'proximal-policy-optimization-algorithms',
     track: 'p',
     title: 'Clipar o passo da política',
-    tagline: 'Um clip na razão de probabilidade deixa reusar o mesmo lote por várias épocas sem o passo destruir a política.',
+    tagline:
+      'Um clip na razão de probabilidade deixa reusar o mesmo lote por várias épocas sem o passo destruir a política.',
     min: 12,
     prereqs: ['tipos-de-aprendizado', 'gradiente-descendente', 'rlhf-e-dpo'],
     paper: {
@@ -722,7 +732,8 @@ export const CONCEPTS: Concept[] = [
     slug: 'deepseek-r1-incentivizing-reasoning-capability-in-llms-via-reinforcement-learning',
     track: 'p',
     title: 'Raciocínio sem demonstração humana',
-    tagline: 'Pular o SFT e recompensar só a resposta certa fez o modelo inventar reflexão, verificação e cadeia longa por conta própria.',
+    tagline:
+      'Pular o SFT e recompensar só a resposta certa fez o modelo inventar reflexão, verificação e cadeia longa por conta própria.',
     min: 12,
     prereqs: ['rlhf-e-dpo', 'pretreino-e-postreino', 'prompting'],
     paper: {
