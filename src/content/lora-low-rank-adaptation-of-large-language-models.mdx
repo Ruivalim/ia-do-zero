@@ -87,7 +87,8 @@ RoBERTa base vai de 86,4 (125 M treináveis) para 87,2 com LoRA de 0,3 M. O RoBE
 88,9 (355 M) para 89,0 com 0,8 M. O DeBERTa XXL, de 91,1 (1.500 M) para 91,3 com 4,7 M. No
 E2E NLG, o GPT-2 medium sobe de 68,2 para 70,4 de BLEU (354,92 M contra 0,35 M). No GPT-3, o
 LoRA de 4,7 M marca 73,4 no WikiSQL, 91,7 no MNLI-matched e 53,8/29,8/45,9 de
-ROUGE-1/2/L no SAMSum, contra 73,8 / 89,5 / 52,0/28,0/44,5 do fine-tuning de 175.255,8 M.
+ROUGE-1/2/L no SAMSum. O fine-tuning completo, com 175.255,8 M treináveis, marca 73,8 no
+WikiSQL, 89,5 no MNLI-matched e 52,0/28,0/44,5 no SAMSum.
 
 O padrão que ficou é o da página de <Ref to="fine-tuning-e-lora">fine-tuning e LoRA</Ref>:
 uma base congelada, muitos adaptadores pequenos, troca barata de tarefa. O paper não inventa
