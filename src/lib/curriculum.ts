@@ -671,6 +671,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2112.10752',
     },
   },
+  {
+    slug: 'direct-preference-optimization-your-language-model-is-secretly-a-reward-model',
+    track: 'p',
+    title: 'O modelo já é o reward model',
+    tagline: 'DPO reescreve o objetivo do RLHF como classificação: a política e o reward implícito são a mesma rede.',
+    min: 12,
+    prereqs: ['rlhf-e-dpo', 'pretreino-e-postreino'],
+    paper: {
+      title: 'Direct Preference Optimization: Your Language Model is Secretly a Reward Model',
+      authors: 'Rafailov et al.',
+      year: 2023,
+      venue: 'NeurIPS 2023',
+      url: 'https://arxiv.org/abs/2305.18290',
+      pdfUrl: 'https://arxiv.org/pdf/2305.18290',
+    },
+  },
   // <papers:end>
 ]
 
