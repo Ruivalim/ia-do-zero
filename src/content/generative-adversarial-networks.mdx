@@ -1,0 +1,175 @@
+<TLDR>
+  Treinar um gerador e um discriminador ao mesmo tempo, num jogo minimax, **dispensa cadeia de
+  Markov e inferência aproximada**: no equilíbrio o gerador reproduz a distribuição dos dados e
+  o discriminador devolve $1/2$ em todo lugar.
+</TLDR>
+
+<Analogy>
+  Um falsário só vê se o caixa aceitou ou recusou a nota. O caixa só vê uma pilha misturada de
+  notas reais e falsas. Os dois melhoram juntos. Quando o caixa não distingue mais, as notas
+  falsas saíram da mesma distribuição das reais. Ninguém precisa escrever a fórmula da cédula:
+  basta o caixa errar.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2014 o deep learning já funcionava bem em modelos discriminativos: uma
+<Ref to="rede-multicamada">rede</Ref> mapeava imagem, áudio ou texto para um rótulo, treinada
+com <Ref to="backpropagation">backpropagation</Ref>, dropout e unidades piecewise linear. Modelos
+<Ref to="tipos-de-aprendizado">gerativos</Ref> profundos avançavam menos.
+
+O obstáculo era a conta, não a falta de ideia. Máquinas de Boltzmann restritas e profundas
+precisam da função de partição, uma soma sobre todos os estados. Isso é intratável. MCMC estima
+o gradiente, mas a cadeia mistura mal. Redes de crença profundas herdam o custo dos dois mundos,
+dirigido e não dirigido. Critérios como score matching e noise-contrastive estimation (NCE)
+exigem densidade escrita até uma constante de normalização. NCE ainda usa uma distribuição de
+ruído fixa, e o aprendizado desacelera depois que o modelo acerta um pedaço das variáveis.
+
+Outra linha treinava uma máquina para amostrar, sem escrever $p(x)$. As generative stochastic
+networks definem uma cadeia de Markov parametrizada. Unidades piecewise linear, boas para o
+<Ref to="gradiente-descendente">gradiente</Ref>, estouram quando entram num laço de
+realimentação. O paper quer gerar com um único passe para a frente, só com as mesmas ferramentas
+que já treinavam um classificador.
+
+## A ideia
+
+O caso que eles chamam de adversarial nets é estreito e suficiente: gerador $G$ e discriminador
+$D$ são <Term id="mlp">MLPs</Term>. $G$ recebe ruído $z$ de uma prior $p_z$ e devolve um ponto no
+espaço dos dados. $D$ devolve um escalar: a probabilidade de aquele $x$ ter vindo dos dados, e
+não de $G$.
+
+Os dois jogam um jogo de dois jogadores. $D$ quer acertar o rótulo (real ou gerado). $G$ quer que
+$D$ erre.
+
+<Steps
+  items={[
+    [
+      'G fabrica um minibatch',
+      'Amostra-se ruído z e passa por G. Sai um lote de falsificações, sem olhar os dados.',
+    ],
+    [
+      'D aprende a separar',
+      'Um lote real e o lote falso entram em D. D sobe o gradiente de acertar os dois rótulos.',
+    ],
+    [
+      'G aprende a enganar',
+      'G desce o gradiente de log(1 - D(G(z))). Não vê o exemplo real: só o sinal que atravessa D.',
+    ],
+    [
+      'Alternar, sem resolver D até o fim',
+      'k passos em D, um passo em G. Nos experimentos, k = 1. Resolver D até convergir a cada rodada é caro e, em conjunto finito, vira overfitting.',
+    ],
+  ]}
+/>
+
+No espaço de funções arbitrárias existe solução única: $p_g = p_{data}$ e $D(x) = 1/2$ em todo
+lugar. Com capacidade finita isso vira um alvo, não uma garantia. No começo do treino $G$ é
+ruim, $D$ recusa as amostras com confiança e $\log(1-D(G(z)))$ satura. A prática do paper troca o
+objetivo de $G$ para maximizar $\log D(G(z))$: o ponto fixo é o mesmo, o gradiente no início não
+some.
+
+## O que mudou depois
+
+Eles treinam em MNIST, no Toronto Face Database e no CIFAR-10. O gerador mistura
+<Term id="relu">ReLU</Term> e sigmoide. O discriminador usa maxout e dropout. O ruído entra só
+na primeira camada de $G$. A verossimilhança exata de $p_g$ não existe: eles encaixam uma janela
+de Parzen gaussiana nas amostras de $G$ e medem a log-verossimilhança do teste. Em MNIST as
+adversarial nets marcam $225 \pm 2$, acima de DBN ($138 \pm 2$), stacked CAE ($121 \pm 1{,}6$) e
+Deep GSN ($214 \pm 1{,}1$). No TFD ficam em $2057 \pm 26$, atrás do stacked CAE ($2110 \pm 50$) e
+à frente de DBN e Deep GSN.
+
+Os autores não afirmam que as amostras são melhores que as da literatura. Dizem que são
+competitivas, sorteadas sem escolha e sem média condicional de unidades escondidas. A coluna da
+direita das figuras mostra o vizinho mais próximo no treino, para argumentar que o modelo não
+decorou. No CIFAR-10 há um modelo denso e outro com discriminador
+<Ref to="cnn">convolucional</Ref> e gerador "deconvolucional". Interpolação linear no espaço de
+$z$ produz dígitos intermediários.
+
+O próprio paper lista extensões: condicionar $G$ e $D$ em um $c$, treinar uma rede auxiliar que
+prevê $z$ dado $x$, usar features de $D$ em aprendizado semi-supervisionado. O que veio depois
+reaproveitou o jogo, agora com convolução, condicionamento e perdas diferentes. Anos mais tarde
+a <Ref to="difusao">difusão</Ref> trocou o adversário por uma regressão de ruído, justamente para
+fugir do equilíbrio instável que a seção 6 já descreve.
+
+<Deep>
+  O jogo é
+
+  $$
+  \min_G \max_D V(D,G)
+  = \mathbb{E}_{x \sim p_{data}}[\log D(x)]
+  + \mathbb{E}_{z \sim p_z}[\log(1-D(G(z)))]
+  $$
+
+  Com $G$ fixo, o $D$ ótimo é
+
+  $$
+  D_G^*(x) = \frac{p_{data}(x)}{p_{data}(x)+p_g(x)}.
+  $$
+
+  Substituir isso em $V$ produz o critério virtual
+  $C(G) = -\log 4 + 2 \cdot \mathrm{JSD}(p_{data} \parallel p_g)$. A divergência de
+  Jensen-Shannon é zero só quando as duas distribuições coincidem, e aí $C(G) = -\log 4$ e
+  $D^* = 1/2$. A prova de convergência do Algoritmo 1 assume capacidade ilimitada e $D$ ótimo a
+  cada passo. Na prática se otimiza $\theta_g$, não $p_g$, e o
+  <Ref to="rede-multicamada">MLP</Ref> introduz vários pontos críticos. O paper trata isso como
+  apostar no que já funcionava em classificação, não como teorema.
+
+  Implementação: qualquer regra de gradiente serve. Eles usam momentum. $k = 1$ é a opção mais
+  barata. O truque de maximizar $\log D(G(z))$ não muda o equilíbrio e evita a saturação precoce.
+  Se $G$ avança demais sem atualizar $D$, muitos $z$ colapsam no mesmo $x$: o paper chama isso de
+  cenário Helvetica. $p_g(x)$ nunca é escrito; avaliar vira Parzen, com variância alta e
+  desempenho ruim em dimensão alta. O gerador não copia componente da entrada para os parâmetros:
+  o <Term id="gradiente">gradiente</Term> só chega atravessando $D$.
+</Deep>
+
+<Callout type="trap">
+  $D(x) = 1/2$ em todo lugar não é treino quebrado. É o equilíbrio que o paper prova: se
+  $p_g = p_{data}$, o discriminador ótimo não tem como preferir um lado. Quem lê $1/2$ como "o
+  juiz não aprendeu nada" inverte o resultado. O outro erro comum é achar que $G$ vê os dados.
+  $G$ só recebe gradiente que atravessou $D$.
+</Callout>
+
+<Callout type="warn">
+  Os autores admitem o preço. Não há $p_g(x)$ explícito. $D$ e $G$ precisam ficar sincronizados.
+  A estimativa por Parzen tem variância alta e não funciona bem em espaço de dimensão alta. A
+  teoria vale no limite não paramétrico; com MLP, não há garantia. Resolver $D$ até o fim a cada
+  rodada, além de caro, cairia em <Term id="overfitting">overfitting</Term> no conjunto finito.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Inventar modelos gerativos profundos',
+        'Treinar G e D num jogo minimax, sem cadeia de Markov nem inferência no treino ou na amostragem',
+        'Provar que noise-contrastive estimation não funciona',
+        'Substituir o discriminador por uma janela de Parzen',
+      ],
+      answer: 1,
+      why: 'Modelos gerativos, NCE e Parzen já existiam. O paper mostra que um jogo diferenciável entre G e D treina só com backpropagation e gera com um passe para a frente.',
+    },
+    {
+      q: 'Quando o discriminador ótimo devolve 1/2 em todo x, o que isso significa?',
+      options: [
+        'O gerador colapsou no cenário Helvetica',
+        'O treino divergiu e D parou de aprender',
+        'pg = pdata, o equilíbrio global do jogo',
+        'D precisa de mais passos k antes de atualizar G',
+      ],
+      answer: 2,
+      why: 'O D ótimo é pdata / (pdata + pg). Se as duas distribuições coincidem, D* = 1/2. É o mínimo global de C(G), com valor -log 4.',
+    },
+    {
+      q: 'Por que o paper troca o objetivo de G de minimizar log(1 - D(G(z))) por maximizar log D(G(z))?',
+      options: [
+        'Porque o ponto fixo muda e fica mais estável',
+        'Porque no início D recusa as amostras com confiança e o primeiro objetivo satura',
+        'Porque o segundo permite usar dropout no gerador',
+        'Porque o teorema da Jensen-Shannon só vale com o segundo',
+      ],
+      answer: 1,
+      why: 'O paper diz que o ponto fixo das dinâmicas é o mesmo. A troca é prática: cedo no treino G é ruim, D rejeita fácil, log(1 - D(G(z))) satura e o gradiente some.',
+    },
+  ]}
+/>

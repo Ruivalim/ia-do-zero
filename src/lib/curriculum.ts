@@ -591,6 +591,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/1512.03385',
     },
   },
+  {
+    slug: 'generative-adversarial-networks',
+    track: 'p',
+    title: 'Gerar amostras enganando um juiz',
+    tagline: 'Um gerador fabrica amostras; um discriminador tenta detectá-las. No equilíbrio, as duas distribuições coincidem.',
+    min: 12,
+    prereqs: ['rede-multicamada', 'backpropagation'],
+    paper: {
+      title: 'Generative Adversarial Networks',
+      authors: 'Goodfellow et al.',
+      year: 2014,
+      venue: 'NeurIPS 2014',
+      url: 'https://arxiv.org/abs/1406.2661',
+      pdfUrl: 'https://arxiv.org/pdf/1406.2661',
+    },
+  },
   // <papers:end>
 ]
 
