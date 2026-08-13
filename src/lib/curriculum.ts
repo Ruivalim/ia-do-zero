@@ -607,6 +607,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/1406.2661',
     },
   },
+  {
+    slug: 'lora-low-rank-adaptation-of-large-language-models',
+    track: 'p',
+    title: 'Congelar a base, treinar o desvio',
+    tagline: 'No GPT-3 175B, aprender só o desvio de posto baixo corta os parâmetros treináveis em 10.000 vezes e some na hora de servir.',
+    min: 12,
+    prereqs: ['fine-tuning-e-lora', 'transformer', 'self-attention'],
+    paper: {
+      title: 'LoRA: Low-Rank Adaptation of Large Language Models',
+      authors: 'Hu et al.',
+      year: 2021,
+      venue: 'ICLR 2022',
+      url: 'https://arxiv.org/abs/2106.09685',
+      pdfUrl: 'https://arxiv.org/pdf/2106.09685',
+    },
+  },
   // <papers:end>
 ]
 

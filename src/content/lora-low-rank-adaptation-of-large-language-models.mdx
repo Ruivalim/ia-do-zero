@@ -1,0 +1,178 @@
+<TLDR>
+  LoRA congela os pesos pré-treinados e **aprende só o desvio** como produto de duas matrizes
+  finas. No GPT-3 175B isso corta os parâmetros treináveis em 10.000 vezes e a memória de GPU
+  em 3 vezes, sem latência extra na inferência.
+</TLDR>
+
+<Analogy>
+  Você tem um livro impresso enorme e precisa de uma edição para cada cliente. Reimprimir o
+  volume inteiro a cada pedido é inviável. LoRA é uma errata de duas páginas: a gráfica guarda
+  o original e, na hora de servir, soma as correções. Trocar de cliente é trocar a errata, não
+  o livro.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2021 a receita padrão era <Ref to="pretreino-e-postreino">pré-treino</Ref> mais
+<Term id="fine-tuning">fine-tuning</Term> completo: atualizar todos os
+<Term id="parametro">parâmetros</Term> da base. Para o GPT-2 ou o RoBERTa large isso já era
+incômodo. Para o GPT-3 de 175 bilhões virou um problema de implantação. Cada cópia adaptada
+carrega tantos parâmetros quanto o original.
+
+O <Ref to="language-models-are-few-shot-learners">few-shot no contexto</Ref> não fecha o
+buraco. No apêndice, o GPT-3 few-shot marca 40,6% no MNLI-matched contra 89,5% depois do
+fine-tuning. No RTE, 69,0% contra 85,4%. Dá para curar uns milhares de exemplos. Não dá para
+guardar uma instância independente de 175 bilhões por tarefa.
+
+As saídas da época tinham custo escondido. Adapter layers (Houlsby et al., Lin et al.) entram
+em série no bloco e obrigam um passo sequencial a mais. Em inferência online, com batch 1 e
+sequência 128 no GPT-2 medium, isso soma 20,7% de latência na variante Adapter<sup>L</sup> e
+30,3% na Adapter<sup>H</sup>, mesmo com gargalo pequeno. Prefix-tuning e parentes ocupam
+posição na sequência: o comprimento útil da tarefa encolhe, e o paper confirma que o
+desempenho não cresce de forma monótona com o número de parâmetros treináveis.
+
+## A ideia
+
+A hipótese, inspirada em Aghajanyan et al. (2020) sobre dimensão intrínseca baixa, é que
+"the change in weights during model adaptation also has a low intrinsic rank". A
+matriz pré-treinada $W_0$ fica congelada. O que se aprende é só o desvio
+$\Delta W = BA$, com posto $r$ muito menor que as dimensões de $W_0$.
+
+<Steps
+  items={[
+    [
+      'Congela a base',
+      'W0 não recebe gradiente. Some o estado do Adam na maior parte dos pesos, e o piso de hardware cai.',
+    ],
+    [
+      'Injeta duas matrizes finas',
+      'A (r por k) começa gaussiana. B (d por r) começa em zero. O desvio BA é nulo no primeiro passo.',
+    ],
+    [
+      'A forward passa a somar',
+      'h = W0 x + BA x. Treina-se só A e B. Um fator α/r escala o desvio para não reajustar o learning rate a cada r.',
+    ],
+    [
+      'Na hora de servir, funde',
+      'Calcula-se W = W0 + BA e infere-se como um modelo normal. Trocar de tarefa é subtrair BA e somar B′A′.',
+    ],
+  ]}
+/>
+
+No <Ref to="transformer">Transformer</Ref> eles aplicam isso sobretudo às projeções de
+<Ref to="self-attention">self-attention</Ref> ($W_q$ e $W_v$) e deixam o MLP congelado. Em
+princípio vale para qualquer camada densa. Com o mesmo orçamento, adaptar $W_q$ e $W_v$ juntas
+bate colocar tudo numa só matriz com rank maior.
+
+<Versus
+  left="Adapter"
+  right="LoRA"
+  rows={[
+    ['Onde entra', 'Em série, depois da camada', 'Em paralelo, ao lado de W'],
+    ['Na inferência', 'Passo extra, latência a mais', 'Dá para fundir em W e zerar o extra'],
+    ['Profundidade', 'Camadas a mais, sequenciais', 'Mesma profundidade do modelo'],
+  ]}
+/>
+
+## O que mudou depois
+
+No GPT-3 175B, com $r = 4$ só em $W_q$ e $W_v$, o checkpoint treinável cai de 350 GB para
+35 MB: cerca de 10.000 vezes. Cem modelos adaptados passam de cerca de 35 TB para cerca de
+354 GB, desde que compartilhem a mesma base. A VRAM de treino com Adam cai de 1,2 TB para
+350 GB. O paper reporta 25% de aceleração no treino (32,5 para 43,1 tokens/s por V100),
+porque o gradiente da maior parte dos pesos não é calculado.
+
+A qualidade empata ou passa o fine-tuning completo, com bem menos parâmetros. No GLUE, o
+RoBERTa base vai de 86,4 (125 M treináveis) para 87,2 com LoRA de 0,3 M. O RoBERTa large, de
+88,9 (355 M) para 89,0 com 0,8 M. O DeBERTa XXL, de 91,1 (1.500 M) para 91,3 com 4,7 M. No
+E2E NLG, o GPT-2 medium sobe de 68,2 para 70,4 de BLEU (354,92 M contra 0,35 M). No GPT-3, o
+LoRA de 4,7 M marca 73,4 no WikiSQL, 91,7 no MNLI-matched e 53,8/29,8/45,9 de
+ROUGE-1/2/L no SAMSum, contra 73,8 / 89,5 / 52,0/28,0/44,5 do fine-tuning de 175.255,8 M.
+
+O padrão que ficou é o da página de <Ref to="fine-tuning-e-lora">fine-tuning e LoRA</Ref>:
+uma base congelada, muitos adaptadores pequenos, troca barata de tarefa. O paper não inventa
+o fine-tuning. Ele torna guardável e servível o que o fine-tuning já fazia.
+
+<Deep>
+  Para $W_0 \in \mathbb{R}^{d \times k}$, o desvio é $B \in \mathbb{R}^{d \times r}$ e
+  $A \in \mathbb{R}^{r \times k}$, com $r \ll \min(d, k)$. A forward fica
+
+  $$
+  h = W_0 x + BAx
+  $$
+
+  $A$ inicia gaussiana, $B$ em zero, então $\Delta W = BA$ começa nulo. A escala $\alpha / r$
+  deixa $\alpha$ parado no primeiro $r$ testado: com Adam, mexer em $\alpha$ é quase mexer no
+  learning rate.
+
+  No Transformer, $W_q$, $W_k$, $W_v$ e $W_o$ são tratados como $d_{\mathrm{model}} \times
+  d_{\mathrm{model}}$, mesmo com a saída fatiada em cabeças. O número de parâmetros treináveis
+  é $|\Theta| = 2 \times \hat{L}_{\mathrm{LoRA}} \times d_{\mathrm{model}} \times r$. No GPT-3,
+  $d_{\mathrm{model}} = 12\,288$ e há 96 camadas. Um orçamento de 18 M (cerca de 35 MB em
+  FP16) dá $r = 8$ numa família de pesos ou $r = 4$ em duas.
+
+  Surpresa da ablação: $r = 1$ em $\{W_q, W_v\}$ já compete (73,4 no WikiSQL, 91,3 no MNLI).
+  Subir $r$ não cobre um subespaço mais útil: as direções singulares de topo de $r = 8$ e
+  $r = 64$ se sobrepõem, o resto parece ruído de treino. $\Delta W$ não repete as direções
+  principais de $W$: ela amplia direções que já existiam e estavam pouco enfatizadas. Na
+  camada 48, o fator é cerca de $21{,}5 \approx 6{,}91 / 0{,}32$ para $r = 4$.
+
+  Se aplicar LoRA a todas as matrizes, treinar os vieses e pôr $r$ no posto de $W_0$, a
+  expressividade volta a ser a do fine-tuning completo. Adapter converge para um MLP extra.
+  Prefix-tuning converge para um modelo que não consegue sequências longas.
+
+  Armadilha de implementação: fundir $W = W_0 + BA$ zera a latência, mas impede misturar
+  tarefas com pares $A, B$ diferentes no mesmo batch. Se a latência não for crítica, dá para
+  não fundir e escolher o módulo por exemplo.
+</Deep>
+
+<Callout type="trap">
+  LoRA não comprime a base. Os 35 MB são só o desvio. Na hora de servir ainda entram os
+  350 GB do GPT-3 congelado. A conta de 354 GB para cem tarefas só fecha se todas
+  compartilham o mesmo $W_0$. Apagar a base e ficar com o adaptador não serve nada.
+</Callout>
+
+<Callout type="warn">
+  Os autores não esperam $r$ pequeno em qualquer tarefa: se o destino estiver noutro idioma
+  que o do pré-treino, re-treinar perto do posto cheio pode ganhar. Também admitem que a
+  escolha de quais matrizes adaptar é heurística, que MLP, LayerNorm e vieses ficaram para
+  depois, e que misturar tarefas no mesmo batch depois de fundir $W$ não é direto.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Comprimir os pesos pré-treinados para posto baixo',
+        'Congelar W0 e treinar só uma atualização de posto baixo BA',
+        'Inventar as camadas adapter',
+        'Mostrar que fine-tuning deixou de funcionar no GPT-3',
+      ],
+      answer: 1,
+      why: 'W0 continua cheia. O que tem posto baixo é o desvio ΔW = BA. Adapter já existia e entra em série. Fine-tuning continua forte: LoRA empata ou passa com bem menos parâmetros treináveis.',
+    },
+    {
+      q: 'Por que LoRA não adiciona latência na inferência?',
+      options: [
+        'Porque o rank é sempre 1',
+        'Porque dá para fundir W = W0 + BA e inferir como um modelo normal',
+        'Porque o paper congela o MLP',
+        'Porque o Transformer fica com menos camadas',
+      ],
+      answer: 1,
+      why: 'A e B vivem em paralelo a W0. Somadas, viram uma matriz do mesmo formato. Adapter não tem essa fusão e paga um passo sequencial a mais. Rank 1 é empiria em algumas tarefas, não a causa da latência zero.',
+    },
+    {
+      q: 'No GPT-3 175B, o que ainda precisa ficar na máquina para servir 100 tarefas?',
+      options: [
+        'Só os 35 MB de cada adaptador; a base pode ser apagada',
+        'A base congelada (350 GB) mais os adaptadores pequenos',
+        'Cem cópias completas de 175 bilhões de parâmetros',
+        'Só os estados do otimizador Adam',
+      ],
+      answer: 1,
+      why: 'O paper é explícito: na implantação ainda entra o modelo de 350 GB. Cem tarefas viram 350 GB + 35 MB × 100 ≈ 354 GB, não 35 TB, justamente porque a base é compartilhada.',
+    },
+  ]}
+/>
