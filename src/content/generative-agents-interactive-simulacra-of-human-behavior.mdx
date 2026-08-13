@@ -1,0 +1,180 @@
+<TLDR>
+  Um <Term id="llm">LLM</Term> sozinho acerta o próximo instante. Este paper acrescenta
+  **memória, reflexão e plano** para o <Term id="agente">agente</Term> continuar crível no
+  dia seguinte, não só na próxima frase.
+</TLDR>
+
+<Analogy>
+  Um caderno de campanha de RPG. Você não recita a vida inteira do personagem a cada jogada:
+  anota o que aconteceu, de vez em quando relê e escreve uma conclusão, e só então decide o
+  que fazer amanhã. Sem o caderno, o personagem esquece o convite e almoça duas vezes.
+</Analogy>
+
+## O problema antes do paper
+
+Há quatro décadas se tenta um proxy crível de comportamento humano. O espaço de um mundo
+aberto não cabe num script. Máquina de estados e árvore de comportamento ainda dominam o
+jogo comercial e quebram na interação que ninguém previu. Reforço venceu em StarCraft e
+Dota 2, onde a recompensa é clara, e não no mundo sem gabarito. SOAR e ACT-R já tinham
+memória e o ciclo perceber-planejar-agir, mas a ação vinha de procedimento escrito à mão.
+
+O <Term id="llm">LLM</Term> resolveu o instante. Com um <Term id="prompt">prompt</Term>
+estreito, o modelo imita o troll de um fórum ou o próximo passo de um robô. Social simulacra
+e surveys sintéticos já faziam isso. O que faltava era o tempo: experiência nova chega a
+cada passo e a <Ref to="janela-de-contexto">janela de contexto</Ref> não cabe a vida do
+personagem. Few-shot ou <Term id="cot">chain-of-thought</Term> no prompt corrente, o que o
+paper chama de template de primeira ordem, condiciona só o agora. Resumir a vida inteira
+também falha: Isabella, perguntada sobre o que a apaixona, vira um texto genérico sobre
+eventos e limpeza de café.
+
+## A ideia
+
+A arquitetura não treina um modelo novo. Ela envolve o ChatGPT (`gpt-3.5-turbo`) com três
+peças que o paper trata como o mínimo para coerência longa. GPT-4 existia, mas a API ainda era
+só por convite.
+
+<Steps
+  items={[
+    [
+      'Tudo vira observação',
+      'Cada percepção entra num memory stream: texto, carimbo de criação e último acesso. Isabella colocando doces, Maria estudando química, a geladeira vazia. Sem filtro prévio.',
+    ],
+    [
+      'Recuperar o que cabe no prompt',
+      'A função de retrieval pontua recência (decaimento 0,995 por hora de jogo desde o último acesso), importância (o próprio modelo nota de 1 a 10) e relevância (cosseno entre embeddings). Soma com peso 1 e fica o topo que cabe na janela.',
+    ],
+    [
+      'Refletir de vez em quando',
+      'Quando a soma das importâncias recentes passa de 150, o agente reflete: cerca de duas ou três vezes por dia. Gera perguntas, busca evidência e grava insights mais abstratos, que entram de novo no stream e formam uma árvore.',
+    ],
+    [
+      'Planejar de cima para baixo',
+      'O dia sai em cinco a oito blocos, depois em horas, depois em fatias de 5 a 15 minutos. Sem plano, Klaus almoça ao meio-dia, às 12h30 e à 13h. Com plano, almoça uma vez e segue o resto da tarde.',
+    ],
+    [
+      'Reagir e conversar',
+      'A cada passo o modelo decide se continua o plano ou se replaneja. Diálogo nasce da memória que cada um tem do outro, não de uma fala genérica.',
+    ],
+  ]}
+/>
+
+Isso não é <Ref to="rag">RAG</Ref> sobre um corpus estático. A base cresce a cada tick, mistura
+observação, reflexão e plano, e pode contradizer o que estava no contexto. Também não é o loop
+de <Ref to="react-synergizing-reasoning-and-acting-in-language-models">ReAct</Ref>: lá o
+problema é o próximo ato no mundo. Aqui é o arco de um personagem em dois dias, em sociedade.
+
+A instância é Smallville, sandbox no estilo The Sims com 25 agentes. Cada um começa com um
+parágrafo de identidade, partido em memórias. O usuário observa, fala em linguagem natural
+ou muda um objeto: o fogão "está queimando", Isabella apaga e refaz o café. O único script
+da cadeia seguinte é um aviso de que Isabella quer uma festa de Dia dos Namorados, das 17h
+às 19h de 14 de fevereiro.
+
+## O que mudou depois
+
+Em dois dias de jogo, o conhecimento da candidatura de Sam a prefeito foi de 1 agente (4%)
+para 8 (32%). O da festa de Isabella foi de 1 (4%) para 13 (52%). Nenhum desses "eu soube"
+era <Ref to="alucinacao">alucinação</Ref>: os autores acharam o diálogo correspondente no
+stream. A densidade da rede de conhecidos mútuos subiu de 0,167 para 0,74. Em 453 respostas
+sobre "você conhece fulano?", 1,3% (6) alucinavam. Cinco dos doze convidados apareceram no
+Hobbs Cafe às 17h. Dos sete que faltaram, três citaram conflito de agenda; quatro disseram
+interesse na entrevista e mesmo assim não planejaram ir.
+
+A avaliação controlada entrevistou os agentes em cinco eixos (autoconhecimento, memória,
+plano, reação, reflexão). Cem avaliadores no Prolific ranquearam cinco condições. Em
+TrueSkill: arquitetura completa 29,89; sem reflexão 26,88; sem reflexão nem plano 25,64;
+worker humano que viu o replay 22,95; sem memória 21,21. Contra o baseline sem memória
+(o estado da arte anterior, no recorte do paper), Cohen $d = 8{,}16$. Kruskal-Wallis
+confirma o ranking ($H(4) = 150{,}29$, $p < 0{,}001$). Só o empate entre worker e o
+baseline vazio não é significativo.
+
+O padrão que ficou: o <Ref to="agentes">agente</Ref> de longo prazo não é o LLM puro. É o
+LLM mais um arquivo de experiência, uma regra de o que entra no prompt, um resumo periódico
+e um plano que o mundo pode furar.
+
+<Deep>
+  A pontuação de retrieval, depois de min-max para $[0, 1]$, é
+
+  $$
+  \mathrm{score} = \alpha_r\,\mathrm{recency} + \alpha_i\,\mathrm{importance} + \alpha_v\,\mathrm{relevance}
+  $$
+
+  com os três $\alpha = 1$. Recência é decaimento exponencial sobre horas de sandbox desde o
+  último acesso (fator $0{,}995$). Importância o modelo atribui na criação da memória: 2 para
+  "arrumar o quarto", 8 para "chamar o crush para um encontro". Relevância é similaridade de
+  <Ref to="embeddings">cosseno</Ref> entre o embedding da memória e o da consulta.
+
+  Reflexão dispara quando a soma das importâncias recentes passa de 150, umas duas ou três
+  vezes por dia. O prompt pede 3 perguntas sobre os 100 registros mais novos, usa cada uma
+  como query e pede 5 insights com citação (`insight (because of 1, 5, 3)`). Reflexão pode
+  citar outra reflexão: a árvore sobe de "Klaus lê sobre gentrificação" até "Klaus é
+  dedicado à pesquisa". Sem isso, Klaus escolhe Wolfgang, o vizinho que só cruza no
+  corredor, e não Maria, que compartilha o interesse de pesquisa.
+
+  O plano é recursivo: 5 a 8 blocos no dia, depois hora, depois fatias de 5 a 15 minutos,
+  com lugar e duração. Se o loop de reação decide interromper, o plano é regenerado a
+  partir daquele instante. O mundo é uma árvore de contenção flattenada em frases. O agente
+  não é onisciente: guarda um subgrafo do que já viu, e ele envelhece quando o agente sai.
+
+  Simular 25 agentes por dois dias de jogo levou vários dias de relógio e milhares de
+  dólares em tokens. Os autores apontam paralelizar agentes e treinar modelo específico
+  como saída, não prompt maior. Armadilha ao reproduzir: despejar o stream inteiro no
+  contexto deixa Isabella genérica. A outra é retrieval incompleto. Tom lembra que combinou
+  discutir a eleição com Isabella *na festa*, e duvida se a festa existe.
+</Deep>
+
+<Callout type="trap">
+  O paper não inventa o agente, nem "coloca o ChatGPT no The Sims". Sem memória, reflexão e
+  plano, o que sobra é o baseline que os autores identificam com o estado da arte anterior:
+  persona no prompt, um instante crível, nenhum arco. A nota de rodapé 1 também é parte da
+  contribuição: os agentes "não implicam agência genuína". Quem lê o paper como evidência de
+  sociedade artificial com vontade própria está lendo o marketing, não o método.
+</Callout>
+
+<Callout type="warn">
+  Os autores admitem o teto. A avaliação cobre dois dias de jogo e o worker humano não é o
+  teto de credibilidade, só uma competência básica. Recuperação falha e o modelo enfeita:
+  Isabella inventa que Sam "vai fazer um anúncio amanhã"; Yuriko transforma o vizinho Adam
+  Smith no autor de *Wealth of Nations*. Instruction tuning deixa o diálogo formal e os
+  agentes cooperativos demais. Normas físicas não passam em linguagem (banheiro de uma
+  pessoa, loja que fecha às 17h). Robustez a prompt hacking e a memory hacking ficou em
+  aberto. O modelo de base carrega viés. Relação parassocial, deepfake e persuasão sob
+  medida entram como risco de aplicação, não como resultado medido.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Treinar um modelo novo só para NPC de jogo',
+        'Estender um LLM congelado com memória, reflexão e plano, para o comportamento ficar coerente no tempo',
+        'Mostrar que GPT-4 já resolve coerência de longo prazo sem arquitetura extra',
+        'Provar que máquina de estados basta num mundo aberto',
+      ],
+      answer: 1,
+      why: 'O modelo é o ChatGPT (gpt-3.5-turbo), sem treino novo. GPT-4 existia, mas a API era só por convite. A peça nova é o memory stream com reflexão e plano.',
+    },
+    {
+      q: 'Como o agente escolhe o que entra no prompt a cada passo?',
+      options: [
+        'Resume a memória inteira e cola o resumo',
+        'Soma recência, importância e relevância (pesos 1) e fica o topo que cabe na janela',
+        'Pega sempre as 100 memórias mais novas',
+        'Usa só a última observação',
+      ],
+      answer: 1,
+      why: 'Os 100 registros mais novos servem só para gerar as perguntas da reflexão. A ação do momento usa a soma das três pontuações, com alfa igual a 1. Resumir a vida inteira é o baseline que deixa Isabella genérica.',
+    },
+    {
+      q: 'Na simulação de dois dias, o que o paper mede sobre a festa?',
+      options: [
+        'Os 25 agentes apareceram no café, porque o convite estava no script de cada um',
+        'O convite não saiu de Isabella',
+        '13 agentes souberam da festa (52%) e 5 dos 12 convidados apareceram',
+        'Só quem tinha crush marcado no parágrafo inicial compareceu',
+      ],
+      answer: 2,
+      why: 'O único script é a intenção inicial de Isabella (e o crush de Maria em Klaus). 13 souberam, 12 foram convidados, 5 apareceram. Três dos sete ausentes citaram conflito; quatro disseram interesse e não planejaram ir.',
+    },
+  ]}
+/>

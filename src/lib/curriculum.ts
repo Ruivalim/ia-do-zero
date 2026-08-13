@@ -639,6 +639,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2210.03629',
     },
   },
+  {
+    slug: 'generative-agents-interactive-simulacra-of-human-behavior',
+    track: 'p',
+    title: 'Memória, reflexão e plano para parecer humano',
+    tagline: 'Um fluxo de memória, reflexão e plano deixa 25 agentes espalhar um convite e aparecer numa festa sem script.',
+    min: 12,
+    prereqs: ['agentes', 'prompting', 'rag', 'janela-de-contexto'],
+    paper: {
+      title: 'Generative Agents: Interactive Simulacra of Human Behavior',
+      authors: 'Park et al.',
+      year: 2023,
+      venue: 'UIST 2023',
+      url: 'https://arxiv.org/abs/2304.03442',
+      pdfUrl: 'https://arxiv.org/pdf/2304.03442',
+    },
+  },
   // <papers:end>
 ]
 
