@@ -575,6 +575,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2005.14165',
     },
   },
+  {
+    slug: 'deep-residual-learning-for-image-recognition',
+    track: 'p',
+    title: 'Aprender o resíduo, não a função',
+    tagline: 'Empilhar camadas piorava o erro de treino. Reformular cada bloco como F(x) + x reverteu isso até 152 camadas.',
+    min: 12,
+    prereqs: ['cnn', 'backpropagation'],
+    paper: {
+      title: 'Deep Residual Learning for Image Recognition',
+      authors: 'He et al.',
+      year: 2015,
+      venue: 'CVPR 2016',
+      url: 'https://arxiv.org/abs/1512.03385',
+      pdfUrl: 'https://arxiv.org/pdf/1512.03385',
+    },
+  },
   // <papers:end>
 ]
 

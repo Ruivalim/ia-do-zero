@@ -1,0 +1,187 @@
+<TLDR>
+  Empilhar camadas numa rede "plain" **sobe o erro de treino**. O paper reformula cada bloco
+  para aprender só o resíduo $F(x)$ e somar de volta a entrada $x$ por um atalho de identidade,
+  o que deixa redes de 152 camadas treináveis e mais precisas.
+</TLDR>
+
+<Analogy>
+  Você recebe um rascunho que já está quase certo. É mais fácil anotar só o que falta do que
+  reescrever a página inteira e torcer para ela sair igual. Se o rascunho já for ótimo, a
+  anotação é vazia. A ResNet trata cada bloco assim: o atalho entrega o rascunho intacto, e as
+  camadas do meio só escrevem a correção.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2015 as <Ref to="cnn">CNNs</Ref> que ganhavam o ImageNet tinham de dezesseis a trinta
+camadas. Inicialização normalizada, <Term id="relu">ReLU</Term> e *batch normalization* já
+deixavam o <Ref to="gradiente-descendente">gradiente</Ref> fluir o bastante para o treino
+começar. O obstáculo que restou era outro.
+
+Quando a profundidade aumenta, a acurácia satura e depois cai. O paper chama isso de
+*degradation*. Não é <Term id="overfitting">overfitting</Term>: o erro de **treino** também
+sobe. Uma rede "plain" de 34 camadas erra mais no treino do que a de 18, no ImageNet e no
+CIFAR-10. A Fig. 1 mostra o mesmo com 20 e 56 camadas no CIFAR-10. Treinar o triplo de
+iterações não resolve.
+
+Isso é estranho. Existe uma solução por construção: copie a rede rasa e faça as camadas novas
+serem identidade. A rede profunda então reproduz a rasa e não pode ter erro de treino pior.
+Os otimizadores da época não achavam essa solução, ou não achavam em tempo razoável.
+
+Vanishing gradient também não explica. As redes "plain" usam *batch normalization*, os sinais
+para a frente têm variância não nula, e os gradientes para trás têm normas saudáveis. O
+<Ref to="backpropagation">backpropagation</Ref> chega. O solver é que não encontra um caminho
+tão bom quanto a identidade construída.
+
+## A ideia
+
+Em vez de pedir que um empilhamento de camadas aproxime a função desejada $H(x)$, o paper
+pede que elas aproximem o resíduo $F(x) := H(x) - x$. A função original vira $F(x) + x$. Se
+a identidade for ótima, basta empurrar $F$ para zero. Se a função ótima estiver perto da
+identidade, o solver só precisa achar uma perturbação pequena.
+
+<Steps
+  items={[
+    [
+      'Atalho de identidade',
+      'A entrada x é somada à saída das camadas empilhadas. Sem parâmetro extra, sem custo extra além da soma elemento a elemento.',
+    ],
+    [
+      'Duas ou três convoluções no meio',
+      'O bloco básico tem duas convoluções 3×3. Nas redes de 50, 101 e 152 camadas entra um gargalo 1×1, 3×3, 1×1, que reduz e depois restaura a dimensão.',
+    ],
+    [
+      'Quando a dimensão muda',
+      'Identidade não fecha a conta. Duas saídas: completar com zeros, sem parâmetro, ou projetar com convolução 1×1. As duas resolvem a degradação. Projetar todos os atalhos é só um pouco melhor, e o paper descarta para não inflar o modelo.',
+    ],
+    [
+      'Mesma receita da VGG, com menos conta',
+      'Filtros 3×3, mesma largura em cada resolução, o dobro de filtros quando o mapa cai pela metade. A baseline de 34 camadas tem 3,6 bilhões de FLOPs, 18% da VGG-19.',
+    ],
+  ]}
+/>
+
+Atalho com porta, como nas *highway networks* da mesma época, não é a mesma coisa. A porta
+tem parâmetro e pode fechar. O atalho da ResNet nunca fecha: a informação sempre passa, e o
+bloco só acrescenta. Highway com mais de 100 camadas não mostrou ganho de acurácia neste
+paper.
+
+## O que mudou depois
+
+No ImageNet a comparação mais limpa é 18 versus 34 camadas, sem parâmetro extra. Na rede
+"plain", 34 camadas piora: 28,54% de erro top-1 contra 27,94% da de 18 (teste com 10
+recortes). Na ResNet, a de 34 cai para 25,03% e a de 18 fica em 27,88%. A profundidade volta
+a ajudar: 2,8 pontos a favor da mais profunda, 3,5 pontos a favor do resíduo contra a "plain"
+de mesma profundidade.
+
+A ResNet-152 tem 11,3 bilhões de FLOPs, ainda abaixo da VGG-16 e da VGG-19 (15,3 e 19,6
+bilhões), e é oito vezes mais profunda que as VGG. Um único modelo marca 4,49% de erro top-5
+na validação. Um ensemble de seis redes de profundidades diferentes (duas delas de 152
+camadas na submissão) chega a 3,57% no conjunto de teste e fica em primeiro no ILSVRC 2015.
+
+No CIFAR-10 o padrão se repete. ResNet-110 marca 6,43% de erro no teste (média 6,61 ± 0,16
+em cinco rodadas), com 1,7 milhão de parâmetros. Uma rede de 1202 camadas treina até erro
+abaixo de 0,1%, então a otimização não trava. O teste sobe para 7,93%. Os autores atribuem a
+<Ref to="overfitting">overfitting</Ref>: 19,4 milhões de parâmetros para um conjunto pequeno,
+sem dropout.
+
+Trocar a VGG-16 pela ResNet-101 no Faster R-CNN sobe o mAP@[.5, .95] no COCO de 21,2% para
+27,2%, ganho absoluto de 6,0 pontos, 28% relativo. No PASCAL VOC 2007 o mAP vai de 73,2%
+para 76,4%; no de 2012, de 70,4% para 73,8%. Essas redes sustentaram também os primeiros
+lugares em detecção e localização no ImageNet e em detecção e segmentação no COCO 2015.
+
+O bloco residual saiu da visão e entrou no <Ref to="transformer">Transformer</Ref>: cada
+subcamada ainda é da forma $x + F(x)$. Sem esse atalho, empilhar dezenas de blocos de
+atenção não fecha.
+
+<Deep>
+  O bloco é
+
+  $$
+  y = \mathcal{F}(x, \{W_i\}) + x
+  $$
+
+  No desenho de duas camadas, $\mathcal{F} = W_2\,\sigma(W_1 x)$, com $\sigma$ a ReLU (o paper
+  omite o viés na notação). A segunda não-linearidade vem **depois** da soma: a saída do bloco
+  é $\sigma(y)$. Quando as dimensões de $x$ e $\mathcal{F}$ não batem,
+
+  $$
+  y = \mathcal{F}(x, \{W_i\}) + W_s x
+  $$
+
+  e $W_s$ é uma projeção $1{\times}1$. Identidade já resolve a degradação; $W_s$ só entra para
+  casar canal ou resolução.
+
+  No gargalo, o atalho liga as duas pontas largas. Trocar identidade por projeção **dobra**
+  tempo e tamanho do modelo, porque a projeção opera na dimensão alta. Por isso o paper trata
+  o atalho sem parâmetro como peça de engenharia, não só de otimização.
+
+  *Batch normalization* entra depois de cada convolução e antes da
+  <Ref to="funcoes-de-ativacao">ativação</Ref>. Otimizador: SGD, *mini-batch* 256, *momentum*
+  0,9, decaimento de peso $10^{-4}$, _learning rate_ 0,1 que cai por 10 quando o erro estagna,
+  até $60 \times 10^{4}$ iterações. Sem dropout. No CIFAR-10 a ResNet-110 precisa de um
+  aquecimento: _learning rate_ 0,01 até o erro de treino ficar abaixo de 80% (cerca de 400
+  iterações), depois volta para 0,1. Sem isso o treino de 110 camadas demora a convergir.
+
+  A Fig. 7 mede o desvio padrão das respostas de cada $3{\times}3$, depois do BN e antes da
+  não-linearidade. Nas ResNets as respostas são menores que nas "plain", e a ResNet mais
+  profunda mexe ainda menos no sinal. Isso sustenta a hipótese de precondicionamento: o
+  resíduo aprendido fica perto de zero, a identidade é um bom ponto de partida.
+
+  Um bloco de uma camada só, $y = W_1 x + x$, não mostrou vantagem. O resíduo precisa de pelo
+  menos duas não-linearidades empilhadas.
+</Deep>
+
+<Callout type="trap">
+  A leitura comum é "ResNet resolveu vanishing gradient". O paper testa essa hipótese e
+  descarta. Com *batch normalization*, nem o sinal para a frente some, nem o gradiente para
+  trás. A degradação é um problema de otimização: o solver não acha a identidade que a
+  arquitetura "plain" deveria conseguir copiar. O atalho muda o que se pede para o solver,
+  não "liga o gradiente" que já estava ligado.
+</Callout>
+
+<Callout type="warn">
+  Profundidade agressiva não é de graça. A rede de 1202 camadas no CIFAR-10 otimiza, mas
+  generaliza pior que a de 110. Os autores deixam em aberto a causa da degradação nas redes
+  "plain" e não combinam o bloco residual com regularização forte. O paper também não afirma
+  que o atalho de identidade serve para qualquer domínio: a evidência é classificação e
+  detecção de imagem.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Inventar conexões que pulam camadas',
+        'Reformular o bloco para aprender o resíduo e somar a identidade',
+        'Provar que vanishing gradient impedia redes com mais de 30 camadas',
+        'Substituir a convolução 3×3 por um filtro 1×1',
+      ],
+      answer: 1,
+      why: 'Atalhos já existiam (e as highway networks da mesma época usam porta com parâmetro). O paper mostra que um atalho de identidade, sempre aberto, deixa o solver aprender F(x) em vez de H(x) e reverte a degradação.',
+    },
+    {
+      q: 'Como o paper mostra que a degradação não é overfitting?',
+      options: [
+        'O erro de teste sobe, mas o de treino cai',
+        'O erro de treino também sobe quando a rede "plain" fica mais profunda',
+        'Eles não usaram conjunto de validação',
+        'A rede de 1202 camadas recusa a convergir',
+      ],
+      answer: 1,
+      why: 'Overfitting seria erro de treino baixo e teste alto. Aqui o treino da rede mais profunda é pior que o da rasa, no ImageNet e no CIFAR-10. A de 1202 camadas, ao contrário, chega a erro de treino abaixo de 0,1%.',
+    },
+    {
+      q: 'O que o experimento de 1202 camadas no CIFAR-10 mostra?',
+      options: [
+        'Que mil camadas sempre generalizam melhor',
+        'Que a otimização não trava, mas o teste piora por overfitting',
+        'Que o atalho de identidade deixa de funcionar acima de 100 camadas',
+        'Que batch normalization falha em redes muito profundas',
+      ],
+      answer: 1,
+      why: 'A rede de 1202 camadas treina até erro abaixo de 0,1% (a otimização funciona) e marca 7,93% no teste, pior que os 6,43% da ResNet-110. Os autores apontam os 19,4 milhões de parâmetros num conjunto pequeno, sem dropout.',
+    },
+  ]}
+/>
