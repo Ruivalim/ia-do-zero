@@ -1,0 +1,168 @@
+<TLDR>
+  Escalar um modelo de linguagem até 175 bilhões de parâmetros faz **few-shot no contexto**
+  competir com fine-tuning em várias tarefas, sem nenhum passo de gradiente.
+</TLDR>
+
+<Analogy>
+  Um estagiário leu a internet inteira. Em vez de mandá-lo para um curso de duas semanas a cada
+  tarefa nova, você cola três exemplos resolvidos no topo do e-mail e pede o quarto. Ele não
+  estuda de novo. Ele reconhece o padrão no próprio texto e continua. Quanto maior a leitura
+  prévia, melhor ele aproveita esses três exemplos.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2020 a receita padrão era pré-treino mais <Ref to="fine-tuning-e-lora">fine-tuning</Ref>. A
+arquitetura já era a mesma para qualquer tarefa, mas o ajuste ainda pedia milhares ou dezenas de
+milhares de exemplos rotulados. Coletar isso para cada uso não escala.
+
+O <Ref to="pretreino-e-postreino">pré-treino</Ref> já mostrava que um modelo de linguagem absorve
+muita habilidade só prevendo o <Ref to="proximo-token">próximo token</Ref>. O GPT-2 tentou ir
+além: especificar a tarefa em texto, com uma instrução e alguns exemplos, e deixar o modelo
+completar. O paper chama o laço interno disso de _in-context learning_. Funcionava mal. No Natural
+Questions o GPT-2 fazia 4%. No CoQA, 55 de F1, mais de 35 pontos atrás do estado da arte da época.
+
+Três motivos para insistir. Dado rotulado por tarefa é caro. Modelo grande ajustado numa
+distribuição estreita aproveita correlação espúria. E gente resolve tarefa nova com uma frase ou
+uns poucos exemplos. Os autores apostam que usar o contexto como especificação cresce com a
+escala, do mesmo jeito que o loss segue uma <Ref to="leis-de-escala">lei de escala</Ref>.
+
+## A ideia
+
+Eles treinam o GPT-3, um modelo autorregressivo de 175 bilhões de parâmetros, dez vezes maior que
+qualquer modelo denso anterior, e **não atualizam os pesos** na hora de avaliar. A tarefa entra
+só como texto.
+
+<Steps
+  items={[
+    [
+      'Pré-treino igual ao GPT-2, só maior',
+      'Oito tamanhos, de 125 milhões a 175 bilhões de parâmetros, todos com 300 bilhões de tokens. A arquitetura é a do GPT-2, com atenção densa e atenção esparsa local se alternando.',
+    ],
+    [
+      'A tarefa vira texto no contexto',
+      'Instrução em linguagem natural, exemplos no formato pergunta e resposta, e um último enunciado sem a resposta. O modelo continua a sequência.',
+    ],
+    [
+      'Três regimes, zero atualização',
+      'Zero-shot: só a instrução. One-shot: um exemplo. Few-shot: quantos couberem na janela de 2048 tokens, em geral de 10 a 100. Nenhum passo de gradiente.',
+    ],
+    [
+      'Escolher entre opções pela verossimilhança',
+      'Em múltipla escolha o modelo não "marca a letra": compara a probabilidade de cada continuação. Em texto livre, gera com beam search.',
+    ],
+  ]}
+/>
+
+A mistura de dados não segue o tamanho de cada fonte. Common Crawl filtrado pesa 60% do treino
+mas é visto 0,44 época. Fontes menores e mais limpas (Wikipedia, WebText2, Books1) são vistas
+duas ou três vezes. 93% do texto é inglês. A janela de 2048 tokens é o teto do
+<Ref to="prompting">few-shot</Ref>: o próximo exemplo simplesmente não entra.
+
+## O que mudou depois
+
+O padrão que o paper documenta é simples: o zero-shot sobe com o tamanho do modelo, e o few-shot
+sobe mais rápido. A distância entre os dois regimes cresce com a capacidade.
+
+Números do paper. No LAMBADA, prever a última palavra de um parágrafo, o few-shot faz 86,4%,
+mais de 18 pontos acima do SOTA anterior (68,0%). No TriviaQA em livro fechado: 64,3% zero-shot,
+68,0% one-shot e 71,2% few-shot, o último acima dos modelos fine-tuned da mesma condição. No
+CoQA, 81,5 / 84,0 / 85,0 de F1. No SuperGLUE, 32 exemplos no contexto e nenhum gradiente dão
+71,8 de média, um pouco acima de um BERT-Large fine-tuned em 125 mil exemplos, e bem abaixo do
+SOTA de 89,0. Menos de oito exemplos por tarefa já bastam para passar o BERT-Large no agregado.
+
+O few-shot não ganha em tudo. No WiC (a mesma palavra tem o mesmo sentido em duas frases?) o
+modelo marca 49,4%, chance. Em NLI adversarial e em parte da leitura (RACE, QuAC) o resultado é
+fraco. Soma de dois dígitos: 100% no few-shot. Cinco dígitos: cerca de 10%. Em notícias
+sintéticas de uns 200 palavras, avaliadores humanos acertam 52% ao separar texto da máquina e
+texto de gente, perto do acaso.
+
+O legado imediato foi tratar o prompt como a especificação da tarefa. Instrução, chat e
+alinhamento não estão neste paper. Dois anos depois o
+<Ref to="training-compute-optimal-llms">Chinchilla</Ref> mostrou o outro lado da mesma escala:
+175 bilhões de parâmetros com 300 bilhões de tokens era um modelo grande demais para o dado que
+viu.
+
+<Deep>
+  A avaliação few-shot é um forward pass. Para o exemplo $i$, sorteiam-se $K$ pares
+  $(\text{contexto}, \text{compleção})$ do conjunto de treino da tarefa, concatenados com
+  quebras de linha, e o modelo completa o enunciado final. $K$ cabe em
+  $n_{\mathrm{ctx}} = 2048$. Quando há conjunto de desenvolvimento, os autores testam alguns
+  $K$ nele e levam o melhor para o teste.
+
+  Em classificação, a decisão é $\arg\max_c P(c \mid \text{prompt})$. Na maior parte das tarefas
+  usam a verossimilhança por token, para não favorecer resposta curta. Em ARC, OpenBookQA e RACE
+  normalizam ainda por $P(c \mid \text{``Answer:''})$, a probabilidade incondicional da
+  continuação. Geração livre usa beam 4 e penalidade de comprimento $\alpha = 0{,}6$.
+
+  O modelo de 175B tem 96 camadas, $d_{\mathrm{model}} = 12\,288$, 96 cabeças com
+  $d_{\mathrm{head}} = 128$, batch de 3,2 milhões de tokens e learning rate
+  $0{,}6 \times 10^{-4}$. O treino usa Adam com $\beta_1 = 0{,}9$, $\beta_2 = 0{,}95$, clip de
+  norma 1, warmup linear em 375 milhões de tokens e decaimento cosseno até 10% da taxa ao longo
+  de 260 bilhões de tokens. Sequências menores que 2048 são empacotadas e separadas por um token
+  de fim de texto, sem máscara especial entre documentos.
+
+  O compute do 175B é $3{,}64 \times 10^{3}$ petaflop/s-dias, ou $3{,}14 \times 10^{23}$ FLOPs,
+  com $C \approx 6ND$ (atenção ignorada, menos de 10% do custo neste regime). Gerar 100 páginas
+  depois de treinado sai da ordem de 0,4 kW-h.
+
+  Um bug no filtro deixou sobreposição com conjuntos de teste. Re-treinar era inviável. A análise
+  posterior marca PIQA e Winograd com asterisco e omite benchmarks quase inteiros no treino
+  (Wikitext, Children's Book Test). No LAMBADA a contaminação existe e o efeito no subconjunto
+  limpo é menor que 0,5 ponto.
+</Deep>
+
+<Callout type="trap">
+  Few-shot neste paper não é fine-tuning com poucos exemplos. Os pesos não andam. O que muda é
+  só o texto na <Ref to="janela-de-contexto">janela</Ref>. O truque também não nasceu aqui: o
+  GPT-2 já fazia in-context learning. A contribuição é a escala, e o fato de o few-shot passar a
+  competir com o fine-tuning em parte das tarefas. Quem lê o título como "inventamos o prompting"
+  inverte o que o paper mostra.
+</Callout>
+
+<Callout type="warn">
+  Os autores deixam em aberto se o modelo aprende a tarefa do zero na hora do teste ou só
+  reconhece um padrão visto no pré-treino. Em desembaralhar letras isso parece aprendizagem de
+  verdade. Em tradução, o conhecimento veio do corpus. Também admitem fraqueza em comparar dois
+  trechos, ausência de arquitetura bidirecional, inferência cara, viés de
+  <Ref to="vies-e-dados">gênero, raça e religião</Ref> herdado da web, e um objetivo que trata
+  todo token como igualmente importante.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Inventar o mecanismo de prompting',
+        'Mostrar que escala torna o few-shot no contexto competitivo, sem atualizar pesos',
+        'Trocar o transformer por uma arquitetura nova',
+        'Provar que fine-tuning deixou de funcionar',
+      ],
+      answer: 1,
+      why: 'O GPT-2 já fazia in-context learning, e o fine-tuning continua forte. O que o paper mostra é que, em 175B, colocar exemplos no contexto sem mexer nos pesos já compete em várias tarefas.',
+    },
+    {
+      q: 'O que acontece com os pesos do GPT-3 no few-shot definido pelo paper?',
+      options: [
+        'São atualizados com learning rate pequena nos K exemplos',
+        'Só a última camada é ajustada',
+        'Nada: a tarefa entra no contexto e o modelo só faz forward pass',
+        'Um adaptador LoRA é treinado nos exemplos do prompt',
+      ],
+      answer: 2,
+      why: 'Zero-shot, one-shot e few-shot neste paper proíbem atualização de peso. A adaptação, se existe, acontece nas ativações ao longo da sequência.',
+    },
+    {
+      q: 'Em qual tipo de tarefa o few-shot do GPT-3 fica perto do acaso?',
+      options: [
+        'Completar a última palavra de um parágrafo (LAMBADA)',
+        'Perguntas de conhecimento em livro fechado (TriviaQA)',
+        'Decidir se uma palavra tem o mesmo sentido em duas frases (WiC)',
+        'Somar dois números de dois dígitos',
+      ],
+      answer: 2,
+      why: 'WiC marca 49,4% no few-shot, chance. LAMBADA, TriviaQA e a soma de dois dígitos são justamente os casos em que o paper reporta resultado forte.',
+    },
+  ]}
+/>

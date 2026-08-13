@@ -559,6 +559,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2607.02770v2',
     },
   },
+  {
+    slug: 'language-models-are-few-shot-learners',
+    track: 'p',
+    title: 'Few-shot sem atualizar pesos',
+    tagline: 'Escalar o modelo para 175 bilhões de parâmetros fez few-shot no contexto competir com fine-tuning em várias tarefas.',
+    min: 12,
+    prereqs: ['prompting', 'transformer', 'pretreino-e-postreino'],
+    paper: {
+      title: 'Language Models are Few-Shot Learners',
+      authors: 'Brown et al.',
+      year: 2020,
+      venue: 'NeurIPS 2020',
+      url: 'https://arxiv.org/abs/2005.14165',
+      pdfUrl: 'https://arxiv.org/pdf/2005.14165',
+    },
+  },
   // <papers:end>
 ]
 
