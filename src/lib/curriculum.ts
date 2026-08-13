@@ -623,6 +623,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2106.09685',
     },
   },
+  {
+    slug: 'react-synergizing-reasoning-and-acting-in-language-models',
+    track: 'p',
+    title: 'Raciocinar e agir no mesmo loop',
+    tagline: 'O modelo intercala pensamento e ação: o raciocínio planeja, a ferramenta busca fato no mundo.',
+    min: 12,
+    prereqs: ['prompting', 'agentes', 'rag'],
+    paper: {
+      title: 'ReAct: Synergizing Reasoning and Acting in Language Models',
+      authors: 'Yao et al.',
+      year: 2022,
+      venue: 'ICLR 2023',
+      url: 'https://arxiv.org/abs/2210.03629',
+      pdfUrl: 'https://arxiv.org/pdf/2210.03629',
+    },
+  },
   // <papers:end>
 ]
 

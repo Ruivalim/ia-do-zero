@@ -1,0 +1,162 @@
+<TLDR>
+  ReAct mostra que dá para **intercalar raciocínio e ação** no mesmo modelo: o pensamento
+  planeja e corrige, a ação busca fato no mundo.
+</TLDR>
+
+<Analogy>
+  Cozinhar. Entre abrir a geladeira e ligar o fogo você pensa: sem sal, uso shoyu; sem a
+  receita, olho no celular. O pensamento não mexe na panela. A ação não substitui o plano.
+  Sem o pensamento, você abre gavetas à toa. Sem a ação, você inventa o que tem na geladeira.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2022 o <Ref to="prompting">chain-of-thought</Ref> já fazia o modelo escrever o raciocínio
+antes da resposta. Esse raciocínio é uma caixa preta estática: só consulta o que está nos
+pesos. Sem ancoragem no mundo, o erro se propaga e a
+<Ref to="alucinacao">alucinação</Ref> entra no meio da cadeia.
+
+Do outro lado, WebGPT, SayCan e Inner Monologue já geravam ações em ambientes interativos.
+O foco era o próximo comando. Faltava memória de trabalho, decompor o objetivo e ajustar o
+plano quando o ambiente devolve o inesperado.
+
+As duas linhas cresciam separadas. Quem só pensa inventa fato. Quem só age se perde no
+trajeto. O paper pergunta o que acontece se o mesmo <Term id="few-shot">few-shot</Term>
+produzir os dois, intercalados.
+
+## A ideia
+
+ReAct aumenta o espaço de ação do <Term id="agente">agente</Term> com linguagem. Uma ação de
+ambiente mexe no mundo e devolve observação. Um *thought* é só texto: não altera o ambiente,
+entra no contexto e serve de memória para o próximo passo.
+
+O modelo principal é o PaLM-540B congelado. Os autores escrevem à mão algumas trajetórias
+humanas (pensamento, ação, observação) e colam no prompt. Sem formato especial nem seleção
+sofisticada de exemplos.
+
+<Steps
+  items={[
+    [
+      'O pensamento planeja',
+      'Decompor a pergunta, lembrar senso comum, extrair o que a observação trouxe, reformular a busca quando ela falha.',
+    ],
+    [
+      'A ação consulta o mundo',
+      'Em HotpotQA e FEVER, três comandos falam com uma API de Wikipedia: search[entidade], lookup[trecho] e finish[resposta]. search devolve as cinco primeiras frases, ou cinco entidades parecidas. lookup simula um Ctrl+F.',
+    ],
+    [
+      'A observação entra no contexto',
+      'O que a API devolveu vira texto. O próximo pensamento lê isso, não só o que o modelo lembrava.',
+    ],
+    [
+      'A densidade muda com a tarefa',
+      'Em pergunta e verificação, thought e ação se alternam a cada passo. Em ALFWorld e WebShop o horizonte é longo: o pensamento aparece esparso, só para decompor, marcar subtarefa ou decidir o que explorar.',
+    ],
+  ]}
+/>
+
+Isso não é <Ref to="rag">RAG</Ref> de uma tacada. A recuperação é fraca de propósito (nome
+exato, cinco frases) e o modelo precisa raciocinar para saber o que buscar depois. Também não
+é só <Term id="tool-use">tool use</Term>: o baseline Act já chama as mesmas ferramentas, só
+sem o pensamento.
+
+## O que mudou depois
+
+Em FEVER, ReAct marca 60,9 de acurácia contra 56,3 do CoT e 58,9 do Act. Em HotpotQA o quadro
+inverte: 27,4 de exact match contra 29,4 do CoT e 25,7 do Act. A combinação ganha dos dois.
+ReAct que recua para CoT com self-consistency chega a 35,1 no HotpotQA. CoT-SC que recua para
+ReAct chega a 64,6 no FEVER. O SOTA supervisionado da época estava bem acima (67,5 e 89,5).
+
+Uma leitura humana de 200 trajetórias no HotpotQA explica a troca. Nas falhas do CoT, 56% são
+alucinação. No ReAct, 0%. Em troca, 47% das falhas do ReAct são erro de raciocínio (incluindo
+o modelo preso num loop) e 23% são busca que não devolve nada útil. O rastro fica mais
+factual e menos flexível.
+
+Em ALFWorld, o melhor ensaio ReAct acerta 71% de 134 jogos não vistos, com um ou dois
+exemplos no prompt. O melhor Act faz 45%. O BUTLER, treinado por imitação em $10^5$
+trajetórias por tipo de tarefa, faz 37%. A pior tentativa ReAct (48%) ainda passa as duas. Em
+WebShop, one-shot ReAct marca 40,0 de sucesso e 66,6 de score, 10 pontos absolutos acima do
+melhor baseline (Act 30,1; imitação 29,1; imitação mais RL 28,7). Humano especialista: 59,6.
+
+O legado imediato é o loop thought-action-observation que a página de
+<Ref to="agentes">agentes</Ref> do curso já trata como padrão. Dá para corrigir o agente
+editando dois pensamentos no meio do caminho, sem mexer em peso.
+
+<Deep>
+  No formalismo, o agente recebe $o_t$ e escolhe $a_t$ segundo $\pi(a_t \mid c_t)$, com
+  contexto $c_t = (o_1, a_1, \ldots, o_t)$. ReAct troca $A$ por $\hat{A} = A \cup L$. Se
+  $\hat{a}_t \in L$, o ambiente não muda; o contexto vira $(c_t, \hat{a}_t)$. Aprender
+  política nesse $L$ infinito pede prior de linguagem forte, daí o few-shot num modelo
+  congelado.
+
+  A API de Wikipedia é deliberadamente pior que um retriever neural. search devolve cinco
+  frases ou cinco sugestões; lookup devolve a próxima sentença com o termo. Os autores
+  limitam ReAct a 7 passos no HotpotQA e 5 no FEVER: trajetórias corretas mais longas que
+  isso são 0,84% e 1,33% dos acertos.
+
+  Dois heurísticos misturam conhecimento interno e externo. ReAct para CoT-SC: se o ReAct não
+  termina a tempo, recua para CoT com 21 amostras a temperatura 0,7 e voto da maioria. CoT-SC
+  para ReAct: se a maioria fica abaixo de $n/2$ votos, entra a Wikipedia.
+
+  Fine-tuning usa 3.000 trajetórias com resposta certa geradas pelo próprio ReAct, no estilo
+  STaR, em PaLM-8B e 62B. Com esse dado, ReAct vira o melhor dos quatro métodos. O 8B
+  ajustado passa todo prompting do 62B; o 62B ajustado passa todo prompting do 540B. Standard
+  e CoT ajustados ensinam a memorizar fato. ReAct e Act ensinam a ir buscar.
+
+  A armadilha de implementação é o decode guloso. Sem beam, o modelo às vezes repete thought
+  e ação até estourar o limite. Outra: o <Ref to="janela-de-contexto">contexto</Ref> do
+  few-shot. Tarefa com espaço de ação grande pede mais demonstrações do que cabe no prompt.
+  Os autores apontam fine-tuning e RL como saída, não prompt maior.
+</Deep>
+
+<Callout type="trap">
+  ReAct não inventou ferramenta nem chain-of-thought. Act já chama a mesma API. CoT já
+  escreve o raciocínio. A contribuição é intercalar os dois: o pensamento escolhe a próxima
+  ação e a observação corrige o pensamento. Quem lê o paper como "agora o modelo sabe usar
+  ferramenta" está descrevendo o baseline Act, não o ReAct.
+</Callout>
+
+<Callout type="warn">
+  Os autores admitem o teto do prompting: o few-shot sustenta poucos comportamentos de
+  raciocínio e ação, e tarefa com ação demais estoura o contexto. Em HotpotQA e FEVER o
+  método ainda fica longe do SOTA supervisionado. Em WebShop, longe do humano. Anotação
+  humana em escala e combinação com RL ficam como trabalho futuro.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Inventar o chain-of-thought',
+        'Intercalar raciocínio verbal e ação no mesmo loop, para o plano se corrigir com o mundo',
+        'Treinar um retriever melhor que BM25 para Wikipedia',
+        'Mostrar que modelo pequeno few-shot já basta para HotpotQA',
+      ],
+      answer: 1,
+      why: 'CoT e ação com ferramenta já existiam. ReAct junta os dois no mesmo prompt. A API de Wikipedia é de propósito fraca, e o few-shot do ReAct no HotpotQA fica atrás do SOTA supervisionado.',
+    },
+    {
+      q: 'No estudo humano de 200 trajetórias do HotpotQA, o que mais separa ReAct de CoT?',
+      options: [
+        'ReAct alucina mais, porque a API atrapalha o raciocínio',
+        'CoT erra mais por alucinação (56% das falhas); ReAct, 0%, e erra mais por raciocínio e busca vazia',
+        'Os dois falham do mesmo jeito, só muda o formato do prompt',
+        'ReAct elimina erro de raciocínio, e por isso passa o SOTA',
+      ],
+      answer: 1,
+      why: 'Tabela 2: 56% das falhas do CoT são alucinação, 0% no ReAct. Em troca o ReAct tem 47% de erro de raciocínio e 23% de busca inútil. Ele não passa o SOTA (67,5 de EM).',
+    },
+    {
+      q: 'O que o paper mede quando tira o pensamento e deixa só a ação (Act)?',
+      options: [
+        'Nada muda, porque a ferramenta já carrega o raciocínio',
+        'Act ganha no ALFWorld, onde o horizonte é longo',
+        'ReAct fica à frente nas duas famílias de tarefa: no ALFWorld, 71% contra 45% no melhor ensaio',
+        'Act empata com humano no WebShop',
+      ],
+      answer: 2,
+      why: 'O melhor ReAct no ALFWorld faz 71%, o melhor Act 45%. Em HotpotQA, FEVER e WebShop o ReAct também passa o Act. Humano no WebShop faz 59,6 de sucesso, ReAct 40,0.',
+    },
+  ]}
+/>
