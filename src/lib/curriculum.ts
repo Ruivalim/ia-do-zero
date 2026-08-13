@@ -745,6 +745,41 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2501.12948',
     },
   },
+  {
+    slug: 'routellm-learning-to-route-llms-with-preference-data',
+    track: 'p',
+    title: 'Roteamento de LLMs por preferência',
+    tagline:
+      'Treinar roteadores com dados do Chatbot Arena corta o custo pela metade sem perder qualidade.',
+    min: 12,
+    prereqs: ['rlhf-e-dpo', 'avaliacao', 'prompting'],
+    paper: {
+      title: 'RouteLLM: Learning to Route LLMs with Preference Data',
+      authors: 'Ong et al.',
+      year: 2024,
+      venue: 'ICLR 2025',
+      url: 'https://arxiv.org/abs/2406.18665',
+      pdfUrl: 'https://arxiv.org/pdf/2406.18665',
+    },
+  },
+  {
+    slug: 'frugalgpt-how-to-use-large-language-models-while-reducing-cost-and-improving-performance',
+    track: 'p',
+    title: 'Cascata de modelos corta até 98% do custo',
+    tagline:
+      'Chamar modelos baratos primeiro e só escalar para o GPT-4 em caso de incerteza empata na qualidade.',
+    min: 12,
+    prereqs: ['avaliacao', 'pretreino-e-postreino', 'prompting'],
+    paper: {
+      title:
+        'FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance',
+      authors: 'Chen et al.',
+      year: 2023,
+      venue: 'TMLR 2024',
+      url: 'https://arxiv.org/abs/2305.05176',
+      pdfUrl: 'https://arxiv.org/pdf/2305.05176',
+    },
+  },
   // <papers:end>
 ]
 

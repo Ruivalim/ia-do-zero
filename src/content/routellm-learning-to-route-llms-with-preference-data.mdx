@@ -1,0 +1,164 @@
+<TLDR>
+  RouteLLM treina classificadores com dados de preferência do Chatbot Arena para **rotear dinamicamente**
+  entre modelos caros e baratos, cortando mais de 50% dos custos de inferência com menos de 5% de perda
+  em benchmarks como MT-Bench, GSM8K e MMLU.
+</TLDR>
+
+<Analogy>
+  Em um hospital, você não coloca um cirurgião-chefe para medir a pressão de todo paciente na recepção.
+  Uma enfermeira de triagem avalia a complexidade do caso em segundos: casos corriqueiros são atendidos
+  pela equipe geral, e apenas os diagnósticos difíceis são encaminhados aos especialistas mais caros.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2024, desenvolvedores que integravam <Ref to="pretreino-e-postreino">LLMs</Ref> em produção
+enfrentavam um dilema binário: direcionar 100% das requisições para um modelo de fronteira caro
+(como GPT-4 ou Claude Opus) para garantir qualidade máxima, ou arriscar modelos menores e baratos
+(como Mixtral-8x7B ou GPT-3.5-Turbo) e degradar respostas em casos complexos de raciocínio.
+
+As abordagens ingênuas de roteamento da época dependiam de regras manuais (ex.: contagem de palavras,
+busca por palavras-chave ou checagem de código) ou chamadas extras a outro LLM para atuar como juiz, o que
+anulava a economia de latência e custo. Além disso, a maioria dos sistemas de roteamento exigia
+anotação humana custosa ou conjuntos de dados sintéticos que não refletiam as perguntas reais e
+abertas de usuários no mundo real.
+
+## A ideia
+
+A equipe da LMSYS propôs usar os dados de batalha do **Chatbot Arena** — onde humanos votam
+às cegas entre duas respostas para o mesmo prompt — para aprender uma função de roteamento
+supervisionada $r(q) \in [0, 1]$. O valor representa a probabilidade de o modelo forte $M_s$
+vencer o modelo fraco $M_w$ para a pergunta $q$.
+
+<Steps
+  items={[
+    [
+      'Coleta de preferências pareadas',
+      'Usa dezenas de milhares de batalhas reais do Chatbot Arena em que usuários compararam respostas de Ms e Mw.',
+    ],
+    [
+      'Treino do roteador leve',
+      'Treina classificadores compactos (como Fatoração Matricial ou BERT) para prever a probabilidade de vitória de Ms.',
+    ],
+    [
+      'Decisão por limiar de custo (τ)',
+      'Se a chance de o modelo forte fazer diferença superar o limiar τ, a requisição vai para Ms; caso contrário, vai para Mw.',
+    ],
+    [
+      'Transferência entre modelos',
+      'O roteador treinado com um par de modelos generaliza para novos modelos sem necessidade de retreino completo.',
+    ],
+  ]}
+/>
+
+O framework avaliou quatro arquiteturas de roteadores principais:
+1. **Matrix Factorization (MF):** Projeta <Ref to="embeddings">embeddings</Ref> do prompt em um espaço latente calibrado com as preferências dos modelos.
+2. **BERT Classifier:** Um classificador linear treinado sobre o token `[CLS]` de um encoder pré-treinado.
+3. **Causal LLM:** Um modelo causal pequeno ajustado para prever a etiqueta de decisão.
+4. **k-Nearest Neighbors (kNN):** Roteador baseado em distância vetorial ponderada no espaço de embedding.
+
+<Versus
+  left="Chamada Estática (100% Frontier)"
+  right="RouteLLM (Roteamento Dinâmico)"
+  rows={[
+    ['Custo de API', 'Máximo (100% das chamadas a preço cheio)', 'Reduzido em 50% a 75% na média'],
+    ['Qualidade', 'Padrão de referência', 'Preserva 95% a 99% da performance do modelo forte'],
+    ['Latência média', 'Determinada pelo modelo maior', 'Cai para a latência do modelo fraco na maioria das queries'],
+    ['Flexibilidade', 'Fixo em um provedor', 'Ajusta a taxa de uso com um único parâmetro de limiar'],
+  ]}
+/>
+
+## O que mudou depois
+
+O RouteLLM foi publicado no ICLR 2025 e demonstrou resultados quantitativos expressivos:
+no par GPT-4-1106-preview ($M_s$) contra Mixtral-8x7B ($M_w$), o roteador baseado em **Matrix Factorization (MF)**
+conseguiu reter **95% do desempenho do GPT-4** encaminhando apenas **25% a 48% das requisições para o GPT-4**
+em benchmarks como GSM8K, MT-Bench e MMLU. Isso representou um corte de custo de mais de **2x a 3x**
+em comparação com a estratégia padrão.
+
+No benchmark *Arena-Hard*, o roteador de Matrix Factorization precisou de apenas **46% das chamadas** para
+o modelo forte para empatar em 95% da performance de vitória. Além disso, o paper provou que o classificador
+aprende propriedades intrínsecas da dificuldade do prompt: um roteador treinado em dados de `GPT-4 vs Mixtral`
+manteve eficácia imediata ao rotear `Claude 3.5 Sonnet vs Llama-3-8B`, viabilizando o reuso prático
+conforme novos modelos são lançados.
+
+<Deep>
+  Formalmente, dado um par de modelos $(M_s, M_w)$ onde $C(M_s) \gg C(M_w)$ em custo por token,
+  o roteador modela uma probabilidade condicional:
+
+  $$
+  P(M_s \succ M_w \mid q) = \sigma(r_\theta(q))
+  $$
+
+  No roteador de Fatoração Matricial (MF), o prompt $q$ é primeiro transformado em um embedding
+  $v_q = \phi(q) \in \mathbb{R}^d$. A probabilidade de vitória de $M_s$ sobre $M_w$ é dada por:
+
+  $$
+  \hat{y} = \sigma\left( v_q^T u_s - v_q^T u_w + b_s - b_w \right)
+  $$
+
+  onde $u_s, u_w \in \mathbb{R}^d$ são vetores latentes treináveis dos modelos e $b_s, b_w$ são escalares
+  de viés. O treino minimiza a entropia cruzada binária sobre o conjunto de preferências pareadas
+  $\mathcal{D} = \{(q_i, y_i)\}$, onde $y_i = 1$ se $M_s$ venceu $M_w$ e $y_i = 0$ caso contrário.
+
+  Para mensurar a eficiência de um roteador, o paper introduz a métrica **Cost at Performance $P$ ($C@P$)**,
+  definida como a fração do custo total de $M_s$ necessária para atingir $P\%$ do ganho de qualidade:
+
+  $$
+  C@P = \frac{\text{Custo}(R_\tau)}{\text{Custo}(M_s)} \quad \text{tal que} \quad \text{Score}(R_\tau) \ge P \cdot \text{Score}(M_s) + (1-P) \cdot \text{Score}(M_w)
+  $$
+
+  Armadilha de implementação: a latência do modelo de embedding usado pelo roteador não pode superar
+  o tempo economizado na geração. Por isso, embeddings leves (como modelos de ~100M parâmetros ou APIs
+  de embedding locais) devem ser priorizados em relação a roteadores que chamam LLMs completos.
+</Deep>
+
+<Callout type="trap">
+  O roteador não prevê se a resposta do modelo fraco estará correta em termos absolutos. Ele prevê se
+  o modelo forte tem vantagem perceptível sobre o fraco para aquele prompt. Prompts triviais onde ambos
+  acertam ou prompts impossíveis onde ambos erram são roteados para o modelo barato.
+</Callout>
+
+<Callout type="warn">
+  Os autores apontam que o desempenho do roteador depende da distribuição de dados do Chatbot Arena.
+  Em domínios corporativos altamente especializados (como medicina diagnóstica restrita ou APIs internas),
+  o roteador pré-treinado pode errar na estimativa de dificuldade sem dados adicionais de calibração.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é o objetivo principal da função de roteamento r(q) no RouteLLM?',
+      options: [
+        'Gerar uma resposta intermediária combinando os dois modelos',
+        'Estimar a probabilidade de o modelo forte superar o modelo fraco para o prompt dado',
+        'Traduzir o prompt para a linguagem nativa do modelo menor',
+        'Fazer fine-tuning contínuo dos pesos de ambos os LLMs',
+      ],
+      answer: 1,
+      why: 'O roteador atua como um classificador que prevê se o modelo mais caro trará benefício de qualidade real em relação ao modelo barato para aquela pergunta.',
+    },
+    {
+      q: 'O que a métrica C@95% avalia no contexto do paper?',
+      options: [
+        'A fração do custo do modelo forte necessária para manter 95% do ganho de qualidade',
+        'A porcentagem de acertos em 95 idiomas diferentes',
+        'A velocidade de geração de tokens quando o modelo opera em 95% de carga',
+        'O número de parâmetros podados da rede neural',
+      ],
+      answer: 0,
+      why: 'C@95% mede o custo relativo para atingir 95% da pontuação máxima do modelo forte, permitindo comparar diretamente a eficiência econômica dos roteadores.',
+    },
+    {
+      q: 'Por que o roteador de Matrix Factorization (MF) é mais eficiente que um LLM juiz para roteamento em tempo real?',
+      options: [
+        'Porque ele não precisa de dados de treino',
+        'Porque opera sobre vetores de embeddings em poucos milissegundos sem pagar o custo de decodificação auto-regressiva de um LLM',
+        'Porque ele substitui a necessidade de manter o modelo forte',
+        'Porque ele só funciona com modelos open source',
+      ],
+      answer: 1,
+      why: 'O roteador MF roda em milissegundos calculando um produto escalar simples de embeddings, sem o overhead de latência e tokens de uma chamada de LLM intermediária.',
+    },
+  ]}
+/>

@@ -1,0 +1,162 @@
+<TLDR>
+  FrugalGPT organiza modelos em **cascata de complexidade**, executando primeiro opções baratas e escalando
+  para o GPT-4 só quando a resposta não atinge um limiar de confiança, cortando até **98% do custo de API**
+  sem perda de acurácia.
+</TLDR>
+
+<Analogy>
+  Em suporte técnico, a dúvida começa no chatbot automatizado. Se o bot resolve com alta certeza,
+  o ticket é fechado por frações de centavo. Apenas os chamados não resolvidos ou ambíguos sobem
+  para o analista pleno ou para o engenheiro sênior, evitando sobrecarregar quem custa mais caro.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2023, com a proliferação de APIs comerciais de <Ref to="pretreino-e-postreino">modelos de linguagem</Ref>,
+o custo por milhão de tokens entre diferentes provedores e tamanhos de modelo chegou a variar mais de
+duas ordens de magnitude (mais de 50 a 100 vezes de diferença entre modelos compactos e modelos como o GPT-4).
+
+A prática padrão das empresas era adotar uma arquitetura homogênea: enviar 100% do tráfego para a API
+mais capaz para evitar alucinações em tarefas difíceis, ou usar exclusivamente modelos menores e
+comprometer a qualidade do produto. Faltava um arcabouço matemático e prático para combinar dinamicamente
+múltiplas APIs de modo a atingir a acurácia do melhor modelo com o custo do modelo mais barato.
+
+## A ideia
+
+Os pesquisadores de Stanford propuseram o **FrugalGPT**, um framework baseado no conceito de
+*LLM Cascade* (cascata sequencial de modelos). Em vez de decidir a rota antes de gerar o texto,
+a cascata executa o modelo mais barato primeiro e avalia se o resultado obtido é suficientemente confiável.
+
+<Steps
+  items={[
+    [
+      'Ordenação por custo',
+      'Organiza uma lista de modelos em ordem crescente de preço por token (ex.: Modelo A barato, Modelo B intermediário, Modelo C de fronteira).',
+    ],
+    [
+      'Geração inicial no modelo leve',
+      'A pergunta é enviada primeiro para o modelo mais barato da cadeia.',
+    ],
+    [
+      'Função de pontuação de confiança',
+      'Um avaliador leve analisa a resposta gerada e calcula uma pontuação de certeza baseada em coerência e probabilidade.',
+    ],
+    [
+      'Interrupção precoce ou escalonamento',
+      'Se a pontuação supera o limiar calibrado, a resposta é entregue imediatamente. Se falhar, a pergunta escala para o próximo modelo.',
+    ],
+  ]}
+/>
+
+O paper também sistematiza outras duas estratégias complementares de economia:
+1. **Prompt Adaptation:** Compressão de instruções e escolha concisa de exemplos <Ref to="prompting">few-shot</Ref> para reduzir contagem de tokens de entrada.
+2. **LLM Approximation:** Criação de réplicas especializadas ou modelos menores ajustados para tarefas repetitivas.
+3. **LLM Cascade:** A combinação dinâmica multimodelo que forma o núcleo do FrugalGPT.
+
+<Versus
+  left="Chamada Direta a Modelo Único"
+  right="Cascata FrugalGPT"
+  rows={[
+    ['Gasto por requisição', 'Preço cheio em todas as perguntas', 'Custo proporcional à dificuldade do prompt'],
+    ['Resolução simples', 'Paga o preço do GPT-4 para responder perguntas triviais', 'Resolvido pelo primeiro modelo da fila por centavos'],
+    ['Flexibilidade de orçamento', 'Tudo ou nada', 'Garante o teto de gasto por meio de otimização de limiares'],
+    ['Controle de qualidade', 'Fixado no modelo escolhido', 'Garante patamar de acurácia com fallback automático'],
+  ]}
+/>
+
+## O que mudou depois
+
+Testado em conjuntos de dados clássicos de processamento de texto (incluindo *Headlines*, *Overruling* e *CoQA*)
+avaliando 12 modelos de fornecedores distintos (OpenAI, Anthropic, AI21, Cohere), o FrugalGPT demonstrou que:
+
+- Conseguiu **igualar ou superar a acurácia do GPT-4 com redução de custo de até 98%**, resolvendo a grande
+  maioria das requisições já no primeiro ou segundo elo da cascata.
+- Com o **mesmo orçamento** de custo de um modelo intermediário (como GPT-3.5-Turbo), o FrugalGPT obteve
+  um **aumento de 4% em acurácia**, porque usou a verba economizada em prompts fáceis para bancar
+  chamadas seletivas ao GPT-4 nas perguntas realmente difíceis.
+
+O artigo fundou a área de *LLM Cascading*, estabelecendo o princípio de que sistemas industriais de IA
+devem operar como ecossistemas heterogêneos de modelos em vez de depender de um único endpoint monolítico.
+
+<Deep>
+  Seja uma sequência ordenada de $K$ modelos de linguagem $\mathcal{M} = (M_1, M_2, \dots, M_K)$
+  com custos unitários estritamente crescentes $c_1 < c_2 < \dots < c_K$.
+
+  Para cada modelo $M_k$, existe uma função de scoring $g_k(q, a_k) \in \mathbb{R}$ que estima a qualidade
+  ou probabilidade de acerto da resposta gerada $a_k = M_k(q)$. A cascata define um vetor de limiares
+  $\boldsymbol{\tau} = (\tau_1, \dots, \tau_{K-1})$.
+
+  O fluxo de parada é definido por:
+
+  $$
+  a(q) = a_j \quad \text{onde} \quad j = \min \left\{ k \in \{1, \dots, K-1\} \mid g_k(q, a_k) \ge \tau_k \right\} \cup \{K\}
+  $$
+
+  O custo total esperado para uma distribuição de consultas $\mathcal{D}$ é a soma ponderada das probabilidades
+  de alcançar cada estágio da cadeia:
+
+  $$
+  \mathbb{E}[\text{Custo}] = c_1 + \sum_{k=2}^{K} c_k \cdot P\left( \bigcap_{i=1}^{k-1} \{g_i(q, a_i) < \tau_i\} \right)
+  $$
+
+  O FrugalGPT formula a calibração de $\boldsymbol{\tau}$ como um problema de otimização restrita:
+  maximizar a acurácia esperada no conjunto de validação sob a restrição de que o custo médio não
+  ultrapasse um orçamento pré-estabelecido $B$:
+
+  $$
+  \max_{\boldsymbol{\tau}} \quad \mathbb{E}_{q \sim \mathcal{D}_{\text{val}}} \left[ \text{Acc}(a(q)) \right] \quad \text{sujeito a} \quad \mathbb{E}_{q \sim \mathcal{D}_{\text{val}}} [\text{Custo}(q)] \le B
+  $$
+
+  Armadilha de implementação: se a latência de ponta a ponta for o requisito mais crítico da aplicação,
+  a cascata sequencial pode introduzir atraso no pior caso (quando a consulta passa por todos os modelos $M_1 \to M_K$).
+  Nesses cenários com SLA rígido, o roteador preditivo a priori (como o RouteLLM) costuma ser preferido.
+</Deep>
+
+<Callout type="trap">
+  FrugalGPT não treina novos pesos de rede nem cria um modelo menor do zero. Ele atua como uma camada
+  de orquestração e decisão sobre APIs e modelos pré-existentes no mercado.
+</Callout>
+
+<Callout type="warn">
+  A eficácia da cascata depende fortemente da qualidade do discriminador de confiança $g(q, a)$. Se o
+  avaliador for excessivamente confiante em respostas incorretas, alucinações geradas por modelos baratos
+  podem passar batido sem atingir o modelo de segurança.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é o princípio fundamental da cascata de LLMs (LLM Cascade) no FrugalGPT?',
+      options: [
+        'Executar todos os modelos em paralelo e fazer uma média aritmética dos tokens',
+        'Chamar primeiro os modelos mais baratos e só avançar para modelos caros se a confiança for insuficiente',
+        'Treinar um único modelo com os pesos combinados de 12 fornecedores',
+        'Comprimir o modelo GPT-4 para rodar em celulares locais',
+      ],
+      answer: 1,
+      why: 'O cascade tenta resolver a consulta com modelos progressivamente mais caros, interrompendo a cadeia assim que um modelo atinge o limiar de qualidade estabelecido.',
+    },
+    {
+      q: 'Como o FrugalGPT consegue aumentar a acurácia média mantendo o mesmo orçamento de um modelo intermediário?',
+      options: [
+        'Aumentando a temperatura de amostragem em todas as chamadas',
+        'Economizando tokens nas perguntas fáceis para investir em chamadas ao GPT-4 nas perguntas difíceis',
+        'Removendo o prompt do sistema para encurtar a janela de contexto',
+        'Usando apenas modelos de código aberto não quantizados',
+      ],
+      answer: 1,
+      why: 'Ao gastar quase nada em consultas triviais resolvidas por modelos baratos, o orçamento economizado é alocado para acionar o GPT-4 nos casos complexos.',
+    },
+    {
+      q: 'Qual é o principal trade-off de latência em uma cascata sequencial quando comparada a um roteador preditivo?',
+      options: [
+        'A cascata sempre tem menor latência em 100% dos casos',
+        'No pior caso (quando a query erra em todos os modelos até o final), a latência é a soma do tempo de execução de todos os modelos tentados',
+        'A cascata não permite chamadas via API externa',
+        'Não há diferença de latência em nenhuma situação',
+      ],
+      answer: 1,
+      why: 'Se a resposta falha sucessivamente nos limiares de confiança, o usuário aguarda a execução sequencial do modelo 1, depois do modelo 2, até o último da fila.',
+    },
+  ]}
+/>
