@@ -1,0 +1,184 @@
+<TLDR>
+  Treinar a <Term id="difusao">difusão</Term> no espaço latente de um autoencoder pré-treinado,
+  com compressão espacial leve, **separa o detalhe que o olho não vê da composição semântica**.
+  O custo cai, a qualidade se segura, e o mesmo esqueleto serve para texto, classe, layout e
+  imagem-a-imagem.
+</TLDR>
+
+<Analogy>
+  Um restaurador precisa limpar um mural de oito metros. Trabalhar ponto a ponto na parede
+  inteira gasta a maior parte do tempo em grão de tinta que ninguém nota.
+
+  A solução do paper: fotografar o mural numa resolução que o olho ainda reconhece, restaurar
+  nessa foto reduzida, e só no fim projetar de volta na parede. A foto se reaproveita. O mesmo
+  arquivo serve para restaurar a partir de um texto, de um mapa semântico ou de um buraco para
+  preencher.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2021, síntese de cena natural em alta resolução era cara. Modelos autorregressivos
+escalavam para bilhões de parâmetros. As
+<Ref to="generative-adversarial-networks">GANs</Ref> geravam rápido, mas o treino adversarial
+não escalava bem para distribuições multimodais complexas.
+
+Os modelos de <Ref to="difusao">difusão</Ref> já batiam o estado da arte em síntese
+condicional por classe e em super-resolução. O problema era o espaço: eles operavam direto
+nos pixels RGB. Treinar os DMs mais fortes da época levava de 150 a 1000 dias de GPU V100.
+Gerar 50 mil amostras pedia cerca de 5 dias numa A100, porque a mesma rede roda em série por
+25 a 1000 passos.
+
+Modelos baseados em verossimilhança gastam capacidade em detalhe de alta frequência que o
+olho não vê. Reponderar a perda reduz o peso desses passos, mas o <Term id="gradiente">gradiente</Term>
+e a rede ainda são avaliados em todos os pixels. Duas saídas da época não fechavam o buraco.
+VQGAN e DALL-E comprimem agressivo (fator espacial 16 e 8) para caber um
+<Ref to="transformer">transformer</Ref> autorregressivo no latente, e a reconstrução sofre:
+no ImageNet-val, R-FID 4,98 e 32,01, PSNR 19,9 e 22,8. O LSGM treina encoder e prior de
+score juntos e precisa balancear reconstrução contra geração.
+
+## A ideia
+
+O paper corta o aprendizado em duas fases. Primeiro um autoencoder aprende um espaço
+perceptualmente equivalente e bem menor. Depois a difusão roda só nesse latente.
+
+<Steps
+  items={[
+    [
+      'Comprimir o que o olho não precisa',
+      'O encoder E manda a imagem x para z = E(x), com fator espacial f = 2, 4, 8…. A perda mistura métrica perceptual e um discriminador em patches, para a reconstrução não ficar borrada.',
+    ],
+    [
+      'Regularizar sem esmagar',
+      'Dois jeitos leves: uma penalidade KL pequena rumo a uma normal padrão, ou uma camada de quantização vetorial absorvida pelo decoder. O latente continua 2D.',
+    ],
+    [
+      'Difundir no latente',
+      'A U-Net estima o ruído em z_t, não em x_t. Na geração, um único passe no decoder D devolve os pixels.',
+    ],
+    [
+      'Condicionar de dois jeitos',
+      'Mapa semântico, imagem de baixa resolução e máscara entram por concatenação. Texto, layout e classe entram por cross-attention, via um encoder τ_θ específico do domínio.',
+    ],
+  ]}
+/>
+
+A U-Net, uma <Ref to="cnn">CNN</Ref> com atalhos entre escalas, tem viés indutivo espacial.
+Por isso o paper não precisa do fator 16 que o transformer autorregressivo exige: no mesmo
+ImageNet-val, o autoencoder com $f = 4$ marca R-FID 0,58 e PSNR 27,4. O autoencoder treina
+uma vez e se reaproveita em vários DMs e tarefas.
+
+## O que mudou depois
+
+No CelebA-HQ, LDM-4 marca FID 5,11, melhor que os modelos de verossimilhança e as GANs da
+tabela. No ImageNet condicionado por classe, LDM-4 com *classifier-free guidance* (escala
+1,5) marca FID 3,60 e IS 247,67 com 400 milhões de parâmetros; o ADM-G marca 4,59 com 608
+milhões. No LSUN-Bedrooms o FID 2,95 fica perto do ADM (1,90), com metade dos parâmetros e
+cerca de um quarto do compute de treino (60 contra 232 dias-V100).
+
+O modelo de texto tem 1,45 bilhão de parâmetros, treinado no LAION-400M. No MS-COCO $256^2$,
+com 250 passos DDIM e *guidance* 1,5, FID 12,63 e IS 30,29: no mesmo patamar do GLIDE (12,24,
+6 bilhões) e do Make-A-Scene (11,84, 4 bilhões). Inpainting no Places acelera pelo menos
+2,7 vezes contra o DM em pixel e melhora o FID em pelo menos 1,6 vezes. Em tarefas densas
+(mapa semântico, super-resolução, inpainting) a mesma rede, treinada em $256^2$, aplica-se de
+forma convolucional até cerca de $1024^2$.
+
+A receita (autoencoder leve, U-Net no latente, <Ref to="self-attention">cross-attention</Ref>
+para texto) virou o esqueleto dos geradores abertos de imagem que cabiam numa GPU só. O
+repositório CompVis liberou os pesos.
+
+<Deep>
+  A perda da difusão no latente é a mesma regressão de ruído do DDPM, só que em $z_t$:
+
+  $$
+  \mathcal{L}_{\mathrm{LDM}}
+  = \mathbb{E}_{E(x),\,\varepsilon\sim\mathcal{N}(0,1),\,t}
+  \bigl\|\varepsilon - \varepsilon_\theta(z_t, t)\bigr\|_2^2
+  $$
+
+  Com condicionamento, $\varepsilon_\theta$ ainda recebe $\tau_\theta(y)$. Texto, layout e
+  classe entram por *cross-attention* nas camadas intermediárias da U-Net:
+
+  $$
+  \mathrm{Attention}(Q,K,V)
+  = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d}}\right)V,
+  \quad
+  Q = W_Q\,\varphi_i(z_t),\quad
+  K = W_K\,\tau_\theta(y),\quad
+  V = W_V\,\tau_\theta(y).
+  $$
+
+  $\tau_\theta$ e $\varepsilon_\theta$ treinam juntos. No texto, $\tau_\theta$ é um
+  transformer sem máscara sobre o tokenizer do BERT (sequência 77, dimensão 1280). Na
+  classe, $\tau_\theta$ é uma camada de <Term id="embedding">embedding</Term> $1{\times}512$.
+  Condicionar $\tau_\theta$ também no passo $t$ daria mais capacidade, e o paper recusa: isso
+  deixaria a inferência mais lenta.
+
+  O autoencoder é adversarial em patches, no estilo VQGAN, com regularização pequena. A KL
+  pesa da ordem de $10^{-6}$. No VQ, a quantização entra no decoder: o DM vê $z$ contínuo,
+  antes do codebook. No espaço KL a variância do latente costuma ser alta demais para
+  amostragem convolucional. O paper divide $z$ pelo desvio padrão componente a componente,
+  estimado no primeiro batch, para o SNR não jogar detalhe semântico cedo demais no processo
+  reverso.
+
+  O fator $f$ é o hiperparâmetro que decide o paper. Com o mesmo orçamento (uma A100, mesmo
+  número de passos e de parâmetros), $f \in \{1,2\}$ deixa a compressão perceptual para a
+  difusão e o treino anda devagar; $f = 32$ estagna cedo, porque o primeiro estágio já
+  jogou informação fora. Depois de 2 milhões de passos no ImageNet, a diferença de FID entre
+  o DM em pixel (LDM-1) e o LDM-8 é 38 pontos. O ponto útil fica em $f = 4$ e $f = 8$.
+</Deep>
+
+<Callout type="trap">
+  O paper não inventou a difusão. DDPM, ADM e *score matching* já existiam em pixel. Quem lê
+  "latent diffusion" como um algoritmo novo de denoising inverte a contribuição: o que muda é
+  o espaço (latente leve, reaproveitável) e o condicionamento (cross-attention para qualquer
+  $y$ tokenizado). Comprimir mais também não é sempre melhor. $f = 32$ limita o teto de
+  qualidade; $f = 1$ devolve o custo que o paper queria cortar.
+</Callout>
+
+<Callout type="warn">
+  A amostragem ainda é sequencial, portanto mais lenta que uma GAN. O autoencoder com $f = 4$
+  perde pouco, mas a reconstrução vira gargalo quando a tarefa pede precisão fina no pixel:
+  os próprios autores acham que os modelos de super-resolução já sofrem isso. O primeiro
+  estágio é adversarial. Juntar isso a um objetivo de verossimilhança pode distorcer a
+  cobertura dos dados, e o paper deixa a pergunta em aberto. Modelos gerativos de imagem
+  também facilitam deep fake e podem vazar o treino; o recorte de viés nos dados continua
+  valendo.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Inventar a difusão e o classifier-free guidance',
+        'Treinar a difusão no latente de um autoencoder pré-treinado, com compressão espacial leve, e condicionar via cross-attention',
+        'Provar que GAN não gera imagem de alta resolução',
+        'Substituir a U-Net por um transformer autorregressivo no pixel',
+      ],
+      answer: 1,
+      why: 'DDPM, ADM e guidance já existiam. O paper move a difusão para um latente 2D levemente comprimido, reaproveita o autoencoder e generaliza o condicionamento com cross-attention.',
+    },
+    {
+      q: 'Por que os autores preferem f = 4 ou f = 8, e não f = 1 nem f = 32?',
+      options: [
+        'Porque só esses fatores cabem em float16',
+        'Porque f = 1 deixa a compressão perceptual para a difusão (treino lento) e f = 32 joga informação fora (qualidade estagna)',
+        'Porque o decoder só aceita latente 32×32',
+        'Porque DALL-E e VQGAN já tinham mostrado que f = 16 é o ótimo',
+      ],
+      answer: 1,
+      why: 'Com o mesmo orçamento, LDM-1 e LDM-2 andam devagar; LDM-32 estagna cedo. Depois de 2 milhões de passos no ImageNet, LDM-8 fica 38 pontos de FID à frente do DM em pixel. DALL-E e VQGAN usam f = 8 e 16 e pagam R-FID alto na reconstrução.',
+    },
+    {
+      q: 'Por que este paper consegue comprimir menos que VQGAN e DALL-E sem estourar o custo?',
+      options: [
+        'Porque o latente fica 2D e a U-Net aproveita o viés espacial, sem precisar da ordem 1D do modelo autorregressivo',
+        'Porque eles treinam encoder e difusão ao mesmo tempo, como o LSGM',
+        'Porque o decoder é um transformer de bilhões de parâmetros',
+        'Porque eles geram a imagem num único passo, como uma GAN',
+      ],
+      answer: 0,
+      why: 'VQGAN e DALL-E forçam compressão forte para o transformer autorregressivo caber. A U-Net opera no mapa 2D, então f = 4 já reduz a conta sem destruir o detalhe. O paper treina o autoencoder antes, num espaço fixo, de propósito para não ter que pesar reconstrução contra geração.',
+    },
+  ]}
+/>

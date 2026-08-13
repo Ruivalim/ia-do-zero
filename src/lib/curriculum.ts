@@ -655,6 +655,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2304.03442',
     },
   },
+  {
+    slug: 'high-resolution-image-synthesis-with-latent-diffusion-models',
+    track: 'p',
+    title: 'Difusão no latente, não no pixel',
+    tagline: 'Um autoencoder tira o detalhe que o olho não vê; a difusão aprende só a composição, e o custo cai o bastante para caber numa GPU.',
+    min: 12,
+    prereqs: ['difusao', 'cnn', 'self-attention'],
+    paper: {
+      title: 'High-Resolution Image Synthesis with Latent Diffusion Models',
+      authors: 'Rombach et al.',
+      year: 2021,
+      venue: 'CVPR 2022',
+      url: 'https://arxiv.org/abs/2112.10752',
+      pdfUrl: 'https://arxiv.org/pdf/2112.10752',
+    },
+  },
   // <papers:end>
 ]
 
