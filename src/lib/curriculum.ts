@@ -718,6 +718,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/1707.06347',
     },
   },
+  {
+    slug: 'deepseek-r1-incentivizing-reasoning-capability-in-llms-via-reinforcement-learning',
+    track: 'p',
+    title: 'Raciocínio sem demonstração humana',
+    tagline: 'Pular o SFT e recompensar só a resposta certa fez o modelo inventar reflexão, verificação e cadeia longa por conta própria.',
+    min: 12,
+    prereqs: ['rlhf-e-dpo', 'pretreino-e-postreino', 'prompting'],
+    paper: {
+      title: 'DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning',
+      authors: 'DeepSeek-AI et al.',
+      year: 2025,
+      venue: 'Nature 2025',
+      url: 'https://arxiv.org/abs/2501.12948',
+      pdfUrl: 'https://arxiv.org/pdf/2501.12948',
+    },
+  },
   // <papers:end>
 ]
 

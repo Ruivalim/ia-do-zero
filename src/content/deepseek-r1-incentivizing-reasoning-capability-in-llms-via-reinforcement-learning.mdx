@@ -1,0 +1,196 @@
+<TLDR>
+  O paper mostra que dá para **incentivar raciocínio longo só com RL**: recompensa na resposta
+  certa, sem SFT em trajetórias humanas, e o modelo passa a refletir, verificar e alongar o
+  pensamento por conta própria.
+</TLDR>
+
+<Analogy>
+  Uma prova em que o professor só olha o número final. Sem gabarito de passo, sem aula de
+  "pense assim". No começo o aluno chuta curto. Com o tempo ele rabisca mais, volta atrás,
+  tenta outro caminho. Ninguém ensinou o "espera, deixa eu rever". A nota no resultado
+  puxou esse comportamento.
+</Analogy>
+
+## O problema antes do paper
+
+Raciocínio em LLM já existia. <Ref to="prompting">Chain-of-thought</Ref> e o
+<Ref to="pretreino-e-postreino">pós-treino</Ref> com trajetórias humanas melhoram
+matemática e código. O preço é o rótulo: alguém escreve o pensamento "certo". Isso
+não escala, carrega o viés de quem anotou e, segundo os autores, coloca um teto:
+o modelo copia o jeito humano de pensar e não explora outro.
+
+O pipeline clássico de <Ref to="rlhf-e-dpo">SFT depois RL</Ref> assume que a
+demonstração vem primeiro. A hipótese daqui é o contrário. SFT em raciocínio
+humano pode *impedir* a exploração. O checkpoint pré-treinado já tem matéria-prima;
+falta um incentivo verificável, não uma receita de passo a passo.
+
+## A ideia
+
+Partem do DeepSeek-V3-Base, um <Term id="moe">MoE</Term> com 671 bilhões de
+parâmetros no total e 37 bilhões ativos por token. O primeiro modelo,
+DeepSeek-R1-Zero, **pula o SFT**. Entra direto em RL com Group Relative Policy
+Optimization (GRPO), um algoritmo da própria equipe (Shao et al., 2024) que
+simplifica o <Ref to="proximal-policy-optimization-algorithms">PPO</Ref>: some o
+value model e estima a *advantage* dentro do grupo de respostas da mesma pergunta.
+
+O template só manda pensar dentro de `<think>` e responder dentro de `<answer>`.
+Não ensina *como* raciocinar. A recompensa é regra, não rede:
+
+<Steps
+  items={[
+    [
+      'Amostra um grupo',
+      'Para cada pergunta, 16 saídas da política velha. No R1-Zero o teto começa em 32768 tokens e sobe para 65536 depois do passo 8200.',
+    ],
+    [
+      'Nota só o verificável',
+      'Acerto (caixa na matemática, casos de teste no código) mais formato das tags, peso igual. Sem reward model neural em raciocínio: os autores viram reward hacking nessa escala.',
+    ],
+    [
+      'Normaliza no grupo',
+      'A advantage de cada saída é o reward menos a média do grupo, dividido pelo desvio. Quem acertou no meio de errados sobe; o grupo inteiro certo não empurra ninguém.',
+    ],
+    [
+      'Atualiza com clip e KL',
+      'Surrogate clipada no estilo PPO, menos um termo de KL contra uma referência que é trocada pela política atual a cada 400 passos.',
+    ],
+  ]}
+/>
+
+Ninguém programa reflexão. Ela aparece. No AIME 2024 o pass@1 do R1-Zero sai de
+15,6% para 77,9%; com consistência entre 16 amostras, 86,7%, acima da média dos
+humanos da competição. A resposta média alonga sozinha ao longo do treino. Num
+checkpoint intermediário o modelo escreve "Wait, wait. Wait. That's an aha moment"
+e recomeça a conta. Os autores chamam isso de *aha moment*: a palavra "wait"
+dispara nas reflexões.
+
+R1-Zero mistura inglês e chinês no meio do pensamento e escreve mal. DeepSeek-R1
+é o produto: milhares de cadeias longas no estilo conversa (cold start), RL com
+bônus de consistência de idioma, rejection sampling mais SFT em cerca de 800 mil
+exemplos (600 mil de raciocínio, 200 mil do resto) e um segundo RL que mistura
+regra verificável com reward models de ajuda e segurança.
+
+## O que mudou depois
+
+A Tabela 3 acompanha os estágios. O cold start (Dev1) sobe instrução: IF-Eval vai
+de 46,6 para 71,7, ArenaHard de 53,6 para 77,0. O AIME cai de 77,9 para 59,0.
+O segundo RL de raciocínio (Dev2) recupera matemática e código. O SFT misto
+(Dev3) e o RL final empurram escrita e preferência: AlpacaEval 2.0 sobe 25% e
+ArenaHard 17% em relação ao Dev3. O R1 fecha AIME 2024 em 79,8 pass@1, MATH-500
+em 97,3, Codeforces no percentil 96,3 (rating 2029), LiveCodeBench em 65,9,
+GPQA Diamond em 71,5.
+
+Na comparação da Tabela 8, o R1 empata o patamar do OpenAI-o1-1217 em matemática
+(o1 marca 79,2 no AIME e 96,4 no MATH-500) e fica atrás no Aider (53,3 contra
+61,7). Engenharia de software quase não anda em relação ao V3: os autores dizem
+que o RL em escala não foi aplicado ali, porque a avaliação é lenta. No GPQA,
+doutorandos com acesso à web ainda vencem.
+
+O legado imediato é o atalho: pergunta difícil, verificador confiável, compute de
+RL. Os padrões longos depois viram SFT em modelos menores (Qwen 1,5B a 32B,
+Llama 8B e 70B) com os mesmos 800 mil exemplos. Os destilados passam as versões
+instruídas originais. O paper não traz, no texto principal, a grade numérica
+dessa destilação.
+
+<Deep>
+  A loss do GRPO, para um grupo de $G$ saídas da política velha, é
+
+  $$
+  \mathcal{J}_{\mathrm{GRPO}}(\theta)
+  = \mathbb{E}\Bigl[\tfrac{1}{G}\sum_{i=1}^{G}
+    \min\bigl(r_i A_i,\;
+    \mathrm{clip}(r_i,1-\varepsilon,1+\varepsilon)A_i\bigr)
+    - \beta\, D_{\mathrm{KL}}(\pi_\theta\Vert\pi_{\mathrm{ref}})\Bigr],
+  $$
+
+  com $r_i=\pi_\theta(o_i\mid q)/\pi_{\theta_{\mathrm{old}}}(o_i\mid q)$ e
+
+  $$
+  A_i=\frac{r_i-\mathrm{mean}(\{r_j\})}{\mathrm{std}(\{r_j\})}.
+  $$
+
+  PPO estima $A$ com GAE e um value model do tamanho da política. Em cadeia
+  longa isso é um problema extra: o começo da resposta pode ser desmentido
+  depois, então prever o retorno a partir de um prefixo é ruim. GRPO joga o
+  value model fora. A KL entra na loss (estimador não viesado), não como
+  penalidade densa por token: os autores argumentam que a versão do PPO pune
+  comprimento e impede a resposta de crescer.
+
+  Hiperparâmetros do R1-Zero: <Term id="learning-rate">learning rate</Term>
+  $3\times 10^{-6}$, $\beta_{\mathrm{KL}}=0{,}001$, temperatura 1, 16 saídas por
+  pergunta, 32 perguntas por passo (batch 512), 10400 passos (1,6 épocas). O
+  rollout gera 8192 saídas, parte em 16 minibatches, uma época interna. No
+  primeiro RL do R1 o clip sobe para $\varepsilon=10$. Clip baixo trunca
+  gradiente de token demais; clip alto instabiliza.
+
+  Custo declarado, H800 a US\$ 2 a hora: R1-Zero 101 mil GPU-horas (cerca de
+  198 horas em $64\times 8$ chips, US\$ 202 mil); dados de SFT 5 mil horas
+  (US\$ 10 mil); R1 41 mil horas, uns 80 horas / 4 dias (US\$ 82 mil). Soma:
+  147 mil horas, US\$ 294 mil. Isso é o pós-treino de raciocínio, não o
+  pré-treino do V3-Base (14,8 trilhões de tokens).
+
+  Armadilha: no segundo RL, reward model de preferência só entra nos últimos
+  400 dos 1700 passos. Mais do que isso e o modelo hackeia o juiz (a recompensa
+  sobe, o Codeforces cai). Poucas centenas de passos de RL "geral" e SFT humano
+  no que não tem verificador. "RL puro" aqui é o domínio em que a regra fecha.
+</Deep>
+
+<Callout type="trap">
+  R1-Zero não nasce do nada e não é o chat que o usuário vê. O V3-Base já
+  comeu volume grande de matemática e código (e páginas da web com resposta
+  gerada por outros modelos). O RL seleciona e alonga o que já era amostrável;
+  não implanta um motor de lógica novo. O produto R1 passa por cold start
+  humano, SFT e preferência. Quem lê o paper como "acabou a anotação" inverte
+  o recorte: anotação de *passo* saiu do loop de raciocínio verificável.
+  Anotação de estilo, segurança e escrita continua. GRPO também não estreia
+  aqui: o paper adota o algoritmo de 2024.
+</Callout>
+
+<Callout type="warn">
+  Os autores listam o que não fecha. R1 não usa ferramenta (calculadora, busca).
+  Gasta token demais em pergunta fácil (*overthinking*). Foi otimizado para
+  chinês e inglês: em outro idioma mistura ou raciocina em inglês. Few-shot
+  piora; o protocolo recomendado é zero-shot. Engenharia de software quase não
+  anda versus o V3. Reward model neural ainda é explorável. Segurança intrínseca
+  fica no patamar do GPT-4o (2024-05-13); o raciocínio melhor também deixa um
+  jailbreak mais executável. Sem verificador confiável, escalar o RL puro
+  continua aberto.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Inventar o algoritmo GRPO',
+        'Mostrar que RL na correção da resposta final, sem SFT prévio em trajetórias humanas, faz surgir cadeia longa, reflexão e verificação',
+        'Provar que chain-of-thought no prompt basta para olimpíada de matemática',
+        'Trocar o pré-treino do V3 por aprendizado por reforço',
+      ],
+      answer: 1,
+      why: 'GRPO é de 2024 e o V3-Base já estava pré-treinado. O que o paper mede é R1-Zero: pular o SFT de raciocínio e recompensar só acerto mais formato. CoT no prompt é o baseline que eles querem deixar para trás.',
+    },
+    {
+      q: 'Por que o R1-Zero não usa reward model neural em matemática e código?',
+      options: [
+        'Porque a GPU não cabe o juiz e a política ao mesmo tempo',
+        'Porque nessa escala o juiz neural é explorável (reward hacking) e retrainar complica o pipeline',
+        'Porque o formato <think> já substitui a recompensa de acerto',
+        'Porque o AIME não tem gabarito automático',
+      ],
+      answer: 1,
+      why: 'A seção 2.2 é explícita: reward model neural, de processo ou de resultado, sofre reward hacking no RL em escala. Matemática fecha na caixa; código fecha nos testes. As tags são um bônus de formato, não o substituto do acerto. O AIME é número, então a regra funciona.',
+    },
+    {
+      q: 'O que o paper recomenda na hora de avaliar o DeepSeek-R1, e por quê?',
+      options: [
+        'Few-shot longo, para copiar o formato das tags',
+        'Zero-shot: descrever o problema e o formato. Few-shot piora o resultado de forma consistente',
+        'Temperatura 0 (greedy), porque cadeia longa fica mais estável',
+        'Forçar o idioma inglês no system prompt, senão o modelo recusa',
+      ],
+      answer: 1,
+      why: 'A seção de limitações diz que o R1 é sensível a prompt e que few-shot degrada de forma consistente. O protocolo padrão deles é amostrar com temperatura 0,6, não greedy (greedy aumenta repetição). Mistura de idioma é outro problema, não recusa.',
+    },
+  ]}
+/>
