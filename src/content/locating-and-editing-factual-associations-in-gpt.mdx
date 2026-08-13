@@ -1,0 +1,175 @@
+<TLDR>
+  Associações factuais no GPT são um cálculo **localizado no MLP das camadas do meio**, no último
+  token do sujeito, e dá para trocar o objeto com um update de posto um (ROME).
+</TLDR>
+
+<Analogy>
+  Uma ficha de biblioteca. O nome do sujeito é o código na lombada. No meio da estante, uma MLP
+  puxa a ficha: cidade, profissão, o que for. A attention no fim da frase só lê o que a ficha diz
+  e escreve a próxima palavra. Se você quiser que a Space Needle fique em Paris, não reimprime o
+  livro. Troca uma linha da ficha.
+</Analogy>
+
+## O problema antes do paper
+
+Um GPT completa "The Space Needle is located in the city of" com "Seattle". O fato está em algum
+lugar dos pesos. Ninguém sabia onde, nem se dava para mexer nele sem re-treinar o modelo
+inteiro.
+
+O caminho óbvio era <Ref to="fine-tuning-e-lora">fine-tuning</Ref>: mostrar o fato novo e
+deixar o <Ref to="gradiente-descendente">gradiente</Ref> espalhar. Isso mexe em muitos
+parâmetros, e o risco é o fato vizinho desmoronar junto. Em BERT já se tentava tratar a MLP
+como memória chave-valor, ou achar neurônios de conhecimento por atribuição de gradiente. O
+GPT autorregressivo tinha ficado menos estudado: a <Ref to="self-attention">attention</Ref> é
+unidirecional, e o modelo gera o <Ref to="proximo-token">próximo token</Ref>, não preenche
+máscara.
+
+A pergunta é concreta. Dado um fato (sujeito, relação, objeto), quais estados escondidos são
+decisivos para emitir o objeto certo? E dá para gravar um fato novo só mexendo na matriz que
+os produz?
+
+## A ideia
+
+Duas metades: localizar, depois editar.
+
+<Steps
+  items={[
+    [
+      'Três passadas no mesmo prompt',
+      'Uma limpa, que acerta o fato. Uma corrompida, em que o embedding do sujeito recebe ruído e a previsão cai. Uma terceira, ainda corrompida, restaurando um único estado escondido do valor limpo.',
+    ],
+    [
+      'O que restaura o fato é causal',
+      'Se devolver um estado limpo, com o sujeito ainda ilegível, faz o modelo voltar a dizer Seattle, aquele estado media o fato. Isso é causal tracing (Pearl, Vig et al.).',
+    ],
+    [
+      'O sítio cedo fica no último token do sujeito',
+      'No GPT-2 XL, o efeito indireto médio de um estado isolado chega a 8,7% na camada 15, nesse token. A MLP domina o sítio (6,6%). A attention no mesmo lugar marca 1,6% e pesa mais no último token do prompt.',
+    ],
+    [
+      'A MLP do meio vira memória associativa',
+      'A primeira metade lê uma chave do sujeito. A segunda devolve um valor com as propriedades memorizadas. A attention das camadas altas só copia esse valor para o token que vai prever o objeto.',
+    ],
+    [
+      'ROME grava um par (chave, valor) com posto um',
+      'A chave k* é a ativação da MLP no último token do sujeito, média sobre prefixos aleatórios. O valor v* é otimizado para emitir o objeto novo, com um termo de KL que pede para o sujeito continuar sendo o que era. Um update de posto um na W_proj insere o par.',
+    ],
+  ]}
+/>
+
+Se o fato mora mesmo naquela MLP, gravar um par novo deve generalizar para paráfrases e não
+vazar para sujeitos vizinhos. Editar outro sítio deveria falhar. É isso que o paper mede.
+
+## O que mudou depois
+
+No zsRE (10 mil registros, GPT-2 XL de 1,5B), ROME marca 99,8% de eficácia, 88,1% em paráfrase
+e 24,2% de especificidade. Empata com hiper-redes treinadas na mesma distribuição (MEND-zsRE
+faz 99,4 / 99,3 / 24,1) e com fine-tuning (99,6 / 82,1 / 23,2), sem rede auxiliar. O modelo
+virgem está em 22,2 / 21,3 / 24,2: regurgitar o prompt original não é o difícil.
+
+O zsRE não pega o dano fino. O prompt vizinho é um fato aleatório, e o vazamento acontece em
+sujeitos próximos. Por isso os autores montam o COUNTERFACT: 21.919 registros de fatos falsos,
+com paráfrases, vizinhos da mesma relação e prompts de geração. O recorte de teste tem 7.500
+casos no GPT-2 XL e 2.000 no GPT-J (6B).
+
+Lá o padrão aparece. Fine-tuning sozinho generaliza, mas no GPT-J chega a 100% de eficácia e
+erra perto de 90% dos prompts de vizinhança. Fine-tuning com norma $L_\infty$ segura o vizinho
+e deixa de generalizar. KE e MEND acertam o prompt original e regurgitam. Knowledge Neurons
+quase não edita. ROME é o único método do paper que segura os dois lados ao mesmo tempo. No
+GPT-2 XL o score (média harmônica de eficácia, paráfrase e vizinhança) fica em 89,2. O mesmo
+padrão se repete no GPT-J.
+
+Quinze voluntários compararam gerações depois de 50 fatos inseridos (150 julgamentos). ROME
+foi 1,8 vezes mais citado como o texto mais consistente com o fato novo do que o fine-tuning
+restrito, e 1,3 vezes menos citado como o mais fluente.
+
+O legado é tratar fato como endereço: camada, token, matriz. Editar a attention tardia só
+ensina o modelo a regurgitar o prompt. O próprio grupo publicou em seguida um método para
+várias edições ao mesmo tempo. Trocar o fato não cura
+<Ref to="alucinacao">alucinação</Ref>: o modelo continua inventando propriedades plausíveis
+sem evidência.
+
+<Deep>
+  Cada camada do <Ref to="transformer">Transformer</Ref> autorregressivo soma attention e MLP
+  ao residual. A MLP é
+
+  $$
+  m_i^{(l)} = W_{\mathrm{proj}}\,\sigma\!\bigl(W_{\mathrm{fc}}\,\gamma(a_i^{(l)}+h_i^{(l-1)})\bigr).
+  $$
+
+  $W_{\mathrm{proj}}$ é memória associativa linear: para chaves $K$ e valores $V$,
+  $WK \approx V$. Inserir $(k_*, v_*)$ é o mínimo quadrado com $\hat{W}k_* = v_*$:
+
+  $$
+  \hat{W} = W + \Lambda (C^{-1} k_*)^{\top},
+  \qquad
+  \Lambda = \frac{v_* - W k_*}{(C^{-1} k_*)^{\top} k_*}.
+  $$
+
+  $C = KK^{\top}$ é a covariância não centrada das chaves, pré-computada com 100 mil ativações
+  de tokens da Wikipedia (snapshot 2020-05-01). Sem $C$, o update empurra o fato novo por cima
+  de memórias vizinhas. A chave $k_*$ é a média da ativação pós-não-linearidade no último token
+  do sujeito (20 prefixos no apêndice). O valor $v_*$ minimiza o log-loss do objeto novo mais
+  $\lambda = 10^{2}$ vezes a KL do prompt "sujeito is a". Adam, learning rate $0{,}5$, no máximo 20
+  passos. A edição no GPT-2 XL (48 camadas) roda na camada 18 e leva cerca de 2 s numa A6000.
+
+  No tracing, o efeito total médio sobre 1.000 fatos conhecidos é 18,6%. Restaurar o estado
+  mais forte do último token do sujeito sobe a probabilidade do objeto de 8,47% (corrompido)
+  para 19,5%; o modelo limpo estava em 27,0%. Integrated Gradients espalha saliência e não acha
+  o padrão. Editar a attention da camada 33 (pico tardio) faz o modelo repetir o prompt: aquele
+  sítio escreve a palavra, não guarda o fato.
+</Deep>
+
+<Callout type="trap">
+  ROME não é um método de treino. Os autores dizem isso na seção de limitações: edita um fato
+  por vez, e serve para testar se o mecanismo é local. Quem lê o paper como "agora dá para
+  corrigir o GPT em produção com um update de posto um" inverte o objetivo. Fine-tuning e LoRA
+  continuam sendo o caminho de adaptação. ROME é o experimento que mostra o endereço do fato.
+</Callout>
+
+<Callout type="warn">
+  A associação é direcional. "The Space Needle is the iconic landmark in Seattle" e o inverso
+  moram em lugares diferentes: trocar os dois pede duas edições. O paper não investiga crença
+  lógica, espacial ou numérica. E, mesmo quando a troca funciona, o modelo continua inventando
+  fatos plausíveis sem evidência. Os autores avisam que um LLM não deve ser fonte autoritativa
+  de fato em cenário crítico, também por causa do risco de alguém gravar desinformação de
+  propósito.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Onde o paper localiza a associação factual no GPT?',
+      options: [
+        'Na attention da última camada, em todo token da frase',
+        'No MLP das camadas do meio, no último token do sujeito',
+        'No embedding estático do sujeito, sem passar por camada',
+        'Distribuída por igual em todas as matrizes do Transformer',
+      ],
+      answer: 1,
+      why: 'O causal tracing acha um sítio cedo no último token do sujeito, e a MLP domina o efeito. A attention pesa no sítio tardio, na hora de emitir o objeto.',
+    },
+    {
+      q: 'O que o ROME faz, em uma frase?',
+      options: [
+        'Re-treina o modelo inteiro no fato novo',
+        'Insere um par chave-valor novo na W_proj de uma MLP, com um update de posto um',
+        'Mascara o sujeito no prompt e pede outra continuação',
+        'Treina uma hiper-rede que prevê o gradiente de todas as camadas',
+      ],
+      answer: 1,
+      why: 'k* seleciona o sujeito, v* é otimizado para o objeto novo, e um update de posto um grava Ŵ k* = v*. Hiper-redes (KE, MEND) e fine-tuning são as baselines, não o ROME.',
+    },
+    {
+      q: 'Por que o paper cria o COUNTERFACT em vez de ficar só no zsRE?',
+      options: [
+        'Porque o zsRE não tem fatos em inglês',
+        'Porque o zsRE mede especificidade com fatos aleatórios, e o vazamento acontece em sujeitos vizinhos',
+        'Porque o COUNTERFACT é menor e mais barato de avaliar',
+        'Porque o zsRE só funciona em BERT',
+      ],
+      answer: 1,
+      why: 'O próprio paper diz que a especificidade do zsRE não é sensível: o dano aparece em vizinhos da mesma relação. O COUNTERFACT amostra esses vizinhos de propósito, e ainda mede paráfrase, fluência e consistência de geração.',
+    },
+  ]}
+/>

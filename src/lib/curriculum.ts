@@ -687,6 +687,22 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2305.18290',
     },
   },
+  {
+    slug: 'locating-and-editing-factual-associations-in-gpt',
+    track: 'p',
+    title: 'Fatos no MLP do meio, editáveis com posto um',
+    tagline: 'Causal tracing acha o fato no MLP do último token do sujeito; um update de posto um troca o objeto.',
+    min: 12,
+    prereqs: ['transformer', 'proximo-token'],
+    paper: {
+      title: 'Locating and Editing Factual Associations in GPT',
+      authors: 'Meng et al.',
+      year: 2022,
+      venue: 'NeurIPS 2022',
+      url: 'https://arxiv.org/abs/2202.05262',
+      pdfUrl: 'https://arxiv.org/pdf/2202.05262',
+    },
+  },
   // <papers:end>
 ]
 
