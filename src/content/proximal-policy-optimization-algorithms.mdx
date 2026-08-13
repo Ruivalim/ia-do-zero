@@ -1,0 +1,195 @@
+<TLDR>
+  PPO troca a região de confiança do TRPO por um **clip na razão de probabilidade** entre a
+  política nova e a velha. Isso deixa fazer várias épocas de SGD no mesmo lote sem o passo
+  destruir a política.
+</TLDR>
+
+<Analogy>
+  Você prova um caldo e ajusta a receita. Se mudar sal, tempo e fogo de uma vez, o próximo
+  caldo é outro prato e a prova anterior não informa mais. PPO deixa mexer várias vezes nas
+  mesmas anotações, mas cada mudança só conta dentro de uma faixa. Fora dela, insistir não
+  soma ponto.
+</Analogy>
+
+## O problema antes do paper
+
+Em 2017, três famílias disputavam o <Ref to="tipos-de-aprendizado">aprendizado por reforço</Ref>
+com rede neural: Q-learning profundo, gradiente de política vanilla e TRPO. Nenhuma fechava
+os três requisitos do paper: escalar para modelo grande e implementação paralela, ser
+eficiente em dado, e funcionar em vários problemas sem retocar hiperparâmetro.
+
+Q-learning com aproximação de função falha em muitos problemas simples. O DQN vai bem em
+jogos com ação discreta e não tinha demonstração sólida no controle contínuo do OpenAI Gym.
+O gradiente vanilla tem eficiência de dado e robustez ruins. TRPO é estável, mas resolve uma
+restrição de KL com conjugate gradient, depois de linearizar o objetivo e quadraticizar a
+restrição. Também não combina com dropout, nem com política e função valor na mesma rede,
+nem com tarefas auxiliares.
+
+A teoria do TRPO aponta para uma penalidade de KL, não para uma restrição dura. Um único
+β não serve em problemas diferentes, e nem dentro do mesmo problema conforme o treino anda.
+Rodar <Ref to="gradiente-descendente">SGD</Ref> nessa penalidade fixa não basta.
+
+O estimador clássico é
+$\hat g = \hat{\mathbb{E}}_t[\nabla_\theta \log\pi_\theta(a_t\mid s_t)\hat A_t]$.
+As implementações montam a loss $L^{PG}$ cujo gradiente é esse estimador. Relê-la várias
+vezes no mesmo lote é tentador e não é justificado: o paper relata atualizações
+destrutivamente grandes. Faltava um algoritmo de primeira ordem com a estabilidade do TRPO.
+
+## A ideia
+
+Seja $r_t(\theta)=\pi_\theta(a_t\mid s_t)/\pi_{\theta_{\mathrm{old}}}(a_t\mid s_t)$ a razão
+de probabilidade. No começo da atualização, $r=1$. A surrogate do TRPO, herdada da
+conservative policy iteration, maximiza $\hat{\mathbb{E}}_t[r_t(\theta)\hat A_t]$. Sem
+freio, isso empurra a política longe demais.
+
+PPO corta o incentivo de $r$ sair da faixa $[1-\epsilon, 1+\epsilon]$. O exemplo do paper
+é $\epsilon=0{,}2$. Depois pega o mínimo entre a versão clipada e a sem clip: um limite
+inferior (pessimista) da surrogate sem clip. A mudança de $r$ só é ignorada quando
+melhoraria o objetivo; quando piora, entra na conta.
+
+<Steps
+  items={[
+    [
+      'Coleta um lote com a política atual',
+      'N atores em paralelo rodam a política velha por T passos e estimam a advantage de cada um.',
+    ],
+    [
+      'Monta a surrogate clipada',
+      'Compara r vezes A com o mesmo produto depois de clipar r na faixa, e fica com o mínimo.',
+    ],
+    [
+      'Otimiza várias épocas no mesmo lote',
+      'SGD ou Adam, K épocas, minibatch no máximo do tamanho do lote. Só então a política velha recebe os pesos novos.',
+    ],
+    [
+      'Se a rede é compartilhada, soma o resto',
+      'Erro quadrático da função valor e um bônus de entropia, com coeficientes c1 e c2.',
+    ],
+  ]}
+/>
+
+Os autores também testam uma penalidade adaptativa de KL: se a divergência ficou abaixo de
+$d_{\mathrm{targ}}/1{,}5$, β cai pela metade; se passou de $d_{\mathrm{targ}}\times 1{,}5$,
+β dobra. Funciona, e perde para o clip.
+
+## O que mudou depois
+
+A comparação entre surrogates roda em sete tarefas de robótica simulada do MuJoCo, um
+milhão de timesteps em cada, três seeds, score 0 na política aleatória e 1 no melhor
+resultado, média das 21 corridas. Sem clip e sem penalidade o score médio é -0,39: no
+HalfCheetah a política fica pior que o acaso. Com clip e $\epsilon = 0{,}2$ o score é
+0,82, o melhor da tabela. A melhor penalidade adaptativa ($d_{\mathrm{targ}} = 0{,}01$)
+marca 0,74; a melhor fixa (β = 3) marca 0,72.
+
+No mesmo domínio, PPO com clip e $\epsilon = 0{,}2$ supera TRPO, CEM, gradiente vanilla
+com passo adaptativo, A2C e A2C com trust region em quase todos os ambientes. Num
+humanóide 3D do Roboschool, a política aprende a correr, virar para um alvo que muda a
+cada 200 timesteps e se levantar sob cubos atirados.
+
+No Atari, 49 jogos, mesma rede do A3C, 40 milhões de frames (10 milhões de timesteps).
+PPO vence 30 jogos contra 18 do ACER e 1 do A2C na recompensa média de todo o treino, a
+métrica que favorece aprender rápido. Na média dos últimos 100 episódios, o ACER vence
+28, o PPO 19, o A2C 1, e há um empate. Os autores descrevem o PPO como bem melhor que o
+A2C em complexidade de amostra e semelhante ao ACER, sendo bem mais simples.
+
+O legado imediato é de implementação: poucas linhas em cima de um gradiente de política
+comum, compatível com rede compartilhada. Anos depois, o loop de
+<Ref to="rlhf-e-dpo">RLHF</Ref> usou esse otimizador para empurrar um modelo de
+linguagem contra um reward model. O paper em si não fala de linguagem. Fala de robô
+simulado e de Atari. O
+<Ref to="direct-preference-optimization-your-language-model-is-secretly-a-reward-model">DPO</Ref>
+depois mostrou que, para preferência em pares, dá para pular esse loop.
+
+<Deep>
+  A loss clipada é
+
+  $$
+  L^{\mathrm{CLIP}}(\theta)=\hat{\mathbb{E}}_t\bigl[
+    \min\bigl(r_t(\theta)\hat A_t,\;
+    \mathrm{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat A_t\bigr)
+  \bigr].
+  $$
+
+  Em primeira ordem em torno de $\theta_{\mathrm{old}}$ (onde $r = 1$) ela coincide com a
+  surrogate sem clip. Longe dali, divergem. A Figura 2 interpola as duas políticas depois
+  de uma iteração no Hopper-v1: a nova tem KL de cerca de 0,02, e é aí que
+  $L^{\mathrm{CLIP}}$ é máxima.
+
+  Com parâmetros compartilhados a loss da iteração vira
+  $L^{\mathrm{CLIP}+\mathrm{VF}+S}=\hat{\mathbb{E}}_t[L_t^{\mathrm{CLIP}}-c_1 L_t^{\mathrm{VF}}+c_2 S[\pi_\theta](s_t)]$,
+  onde $L^{\mathrm{VF}}=(V_\theta(s_t)-V_t^{\mathrm{targ}})^2$ e $S$ é o bônus de
+  entropia. A advantage vem de uma GAE truncada:
+  $\hat A_t=\delta_t+(\gamma\lambda)\delta_{t+1}+\cdots+(\gamma\lambda)^{T-t+1}\delta_{T-1}$,
+  com $\delta_t=r_t+\gamma V(s_{t+1})-V(s_t)$. Quando $\lambda = 1$ isso reduz ao
+  estimador de horizonte finito do A2C.
+
+  No MuJoCo a política é um <Term id="mlp">MLP</Term> de duas camadas com 64 unidades e
+  tanh, gaussiana com desvio padrão livre, sem compartilhar parâmetros e sem entropia.
+  Tabela 3: $T = 2048$, Adam $3\times 10^{-4}$, 10 épocas, minibatch 64,
+  $\gamma = 0{,}99$, $\lambda = 0{,}95$. No Atari, $T = 128$, 3 épocas, 8 atores,
+  minibatch $32\times 8$, $\epsilon = 0{,}1\times\alpha$, $c_1 = 1$, $c_2 = 0{,}01$,
+  $\alpha$ decai de 1 a 0. O <Term id="learning-rate">learning rate</Term> é
+  $2{,}5\times 10^{-4}\times\alpha$.
+
+  Armadilha de implementação: clipar a loss ou o
+  <Term id="gradiente">gradiente</Term> não é o que o paper faz. O clip é em $r$.
+  Esquecer o $\min$ e só clipar $r$ também não reproduz o limite pessimista: o mínimo
+  descarta a melhoria e mantém a piora.
+</Deep>
+
+<Callout type="trap">
+  PPO não nasceu para alinhar language model. Em 2017 é um algoritmo geral de
+  aprendizado por reforço, medido em locomoção e Atari. O
+  <Ref to="rlhf-e-dpo">RLHF</Ref> pegou esse otimizador anos depois. Outra inversão
+  comum: tratar o clip como um teto no reward, na KL ou no learning rate. O que entra
+  na faixa $[1-\epsilon, 1+\epsilon]$ é a razão $\pi_\theta / \pi_{\theta_{\mathrm{old}}}$.
+  Também não é o TRPO com outro nome. TRPO tem restrição dura de KL e conjugate
+  gradient. PPO é primeira ordem, clip (ou penalidade adaptativa) e várias épocas no
+  mesmo lote.
+</Callout>
+
+<Callout type="warn">
+  O clip é um limite inferior da surrogate sem clip, não um limite do retorno
+  verdadeiro. Os autores não reivindicam melhoria monótona. A variante com
+  penalidade de KL perde para o clip nas sete tarefas, e de vez em quando a
+  divergência da atualização foge do alvo. No Atari o ACER ainda vence mais jogos
+  no desempenho final (28 a 19). Nada do paper é um modelo de linguagem.
+</Callout>
+
+<Quiz
+  questions={[
+    {
+      q: 'Qual é a contribuição central do paper?',
+      options: [
+        'Inventar o aprendizado por reforço com rede neural',
+        'Trocar a restrição de região de confiança por uma surrogate clipada, que deixa fazer várias épocas de SGD no mesmo lote',
+        'Provar que Q-learning não funciona em ação contínua',
+        'Treinar um language model com preferência humana',
+      ],
+      answer: 1,
+      why: 'PPO não inventa RL nem fala de linguagem. A novidade é a L^CLIP: um clip na razão de probabilidade que aproxima o efeito do TRPO com otimização de primeira ordem e reuso do lote.',
+    },
+    {
+      q: 'Por que a loss pega o mínimo entre a versão clipada e a sem clip?',
+      options: [
+        'Para acelerar o Adam',
+        'Para formar um limite pessimista: a mudança de r só é ignorada quando melhoraria o objetivo',
+        'Para forçar a política a ficar determinística',
+        'Para compartilhar parâmetros com a função valor',
+      ],
+      answer: 1,
+      why: 'O paper é explícito: o min faz a loss ser um lower bound da surrogate sem clip. Melhoria fora da faixa não conta; piora conta. Compartilhar parâmetros é outro termo da loss, não o motivo do min.',
+    },
+    {
+      q: 'O que acontece, no benchmark de controle contínuo, se a surrogate fica sem clip e sem penalidade de KL?',
+      options: [
+        'Empata com o clip de ε = 0,2',
+        'O score médio fica negativo, pior que a política aleatória num dos ambientes',
+        'O algoritmo recusa rodar mais de uma época',
+        'A política converge mais rápido no Atari',
+      ],
+      answer: 1,
+      why: 'Tabela 1: sem clip nem penalidade o score normalizado médio é -0,39, puxado pelo HalfCheetah, que fica pior que o acaso. O clip com ε = 0,2 sobe para 0,82. A atualização sem freio é exatamente o caso que a seção 2.1 chama de destrutivo.',
+    },
+  ]}
+/>

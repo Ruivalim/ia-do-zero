@@ -703,6 +703,21 @@ export const CONCEPTS: Concept[] = [
       pdfUrl: 'https://arxiv.org/pdf/2202.05262',
     },
   },
+  {
+    slug: 'proximal-policy-optimization-algorithms',
+    track: 'p',
+    title: 'Clipar o passo da política',
+    tagline: 'Um clip na razão de probabilidade deixa reusar o mesmo lote por várias épocas sem o passo destruir a política.',
+    min: 12,
+    prereqs: ['tipos-de-aprendizado', 'gradiente-descendente', 'rlhf-e-dpo'],
+    paper: {
+      title: 'Proximal Policy Optimization Algorithms',
+      authors: 'Schulman et al.',
+      year: 2017,
+      url: 'https://arxiv.org/abs/1707.06347',
+      pdfUrl: 'https://arxiv.org/pdf/1707.06347',
+    },
+  },
   // <papers:end>
 ]
 
